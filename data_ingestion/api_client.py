@@ -85,6 +85,45 @@ def get_teams_by_league_and_season(league_id, season):
         return None
 
 
+def get_fixtures_by_league_and_season(league_id, season):
+    """
+    Belirtilen lig ve sezondaki tüm maçların sonuçlarını çeker.
+    :param league_id: API'nin lig için belirlediği ID
+    :param season: Sezon yılı
+    :return: Maç bilgilerini içeren bir liste veya hata durumunda None
+    """
+    endpoint = "/fixtures"
+    params = {'league': league_id, 'season': season}
+
+    print(f"-> {season} sezonu için maç verileri çekiliyor...")
+
+    response = requests.get(API_URL + endpoint, headers=HEADERS, params=params)
+
+    if response.status_code == 200:
+        api_response = response.json()['response']
+
+        matches_list = []
+        for fixture in api_response:
+            # Sadece bitmiş maçları ve golleri olanları alalım
+            if fixture['fixture']['status']['short'] == 'FT' and fixture['goals']['home'] is not None:
+                match_info = {
+                    'api_mac_id': fixture['fixture']['id'],
+                    'sezon_araligi': fixture['league']['season'],
+                    'hafta': int(fixture['league']['round'].split(' - ')[-1]),
+                    'mac_tarihi': fixture['fixture']['date'],
+                    'ev_sahibi_takim_id': fixture['teams']['home']['id'],
+                    'deplasman_takim_id': fixture['teams']['away']['id'],
+                    'ev_sahibi_gol': fixture['goals']['home'],
+                    'deplasman_gol': fixture['goals']['away']
+                }
+                matches_list.append(match_info)
+
+        print(f"-> {len(matches_list)} adet tamamlanmış maç bulundu.")
+        return matches_list
+    else:
+        print(f"Hata! Maç verisi çekilemedi. Durum Kodu: {response.status_code}")
+        return None
+
 # Bu dosya doğrudan çalıştırıldığında bağlantıyı test etmesi için:
 if __name__ == '__main__':
     test_api_connection()
