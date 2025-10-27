@@ -247,6 +247,43 @@ def update_match_statistics(stats_data):
     connection.close()
 
 
+def get_matches_for_table(season_year):
+    """
+    Puan durumu hesaplaması için belirtilen sezondaki tüm maçları,
+    takım adlarıyla birlikte veritabanından çeker.
+    """
+    connection = sqlite3.connect(DATABASE_NAME)
+    # Sonuçları sütun adlarıyla erişilebilen objeler olarak almak için
+    connection.row_factory = sqlite3.Row
+    cursor = connection.cursor()
+
+    # SQL Sorgusu: Maclar tablosunu Takimlar tablosu ile iki kez birleştirerek
+    # ev sahibi ve deplasman takımlarının ID'leri yerine adlarını alıyoruz.
+    query = """
+    SELECT
+        m.hafta,
+        ht.takim_adi AS ev_sahibi,
+        dt.takim_adi AS deplasman,
+        m.ev_sahibi_gol,
+        m.deplasman_gol
+    FROM Maclar m
+    JOIN Takimlar ht ON m.ev_sahibi_takim_id = ht.api_takim_id
+    JOIN Takimlar dt ON m.deplasman_takim_id = dt.api_takim_id
+    WHERE m.sezon_yili = ?
+    ORDER BY m.mac_tarihi
+    """
+
+    cursor.execute(query, (season_year,))
+
+    # Gelen veriyi daha kolay işlemek için bir sözlük listesine çeviriyoruz
+    matches = [dict(row) for row in cursor.fetchall()]
+
+    connection.close()
+
+    print(f"\n{season_year} sezonu için veritabanından puan durumu hesaplaması amacıyla {len(matches)} maç çekildi.")
+    return matches
+
+
 # Bu dosya doğrudan çalıştırıldığında veritabanını oluşturması için:
 if __name__ == '__main__':
     create_database()
