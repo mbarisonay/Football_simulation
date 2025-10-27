@@ -1,6 +1,9 @@
-# data_ingestion/scraper.py (Yorum Temizleme ve Çalışan Son Versiyon)
+# data_ingestion/scraper.py (Selenium Manager ile Çalışan Son Versiyon)
 
-import requests
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup, Comment
 import time
 
@@ -8,48 +11,63 @@ import time
 def scrape_fbref_season(season_start_year):
     """
     FBref.com'dan belirtilen sezonun Premier Lig maç sonuçlarını çeker.
-    Bu versiyon, JavaScript tarafından gizlenen yorumlanmış HTML'i temizler.
+    Bu versiyon, sürücü yönetimi için Selenium'un kendi mekanizmasını (Selenium Manager) kullanır.
     :param season_start_year: Sezonun başlangıç yılı (örn: 2022-2023 sezonu için 2022)
     """
+
+    # 1. Selenium'u ayarla (Selenium 4.6.0 ve üstü sürücü yönetimini kendi yapar)
+    options = webdriver.ChromeOptions()
+    options.add_argument('--headless')  # Tarayıcının görsel olarak açılmadan arka planda çalışmasını sağlar.
+    options.add_argument('--log-level=3')  # Terminaldeki gereksiz logları gizler
+
+    # Tarayıcıyı başlat (service=... parametresi olmadan)
+    # Selenium Manager doğru sürücüyü otomatik olarak bulup yönetecek.
+    driver = webdriver.Chrome(options=options)
 
     season_str = f"{season_start_year}-{season_start_year + 1}"
     url = f"https://fbref.com/en/comps/9/{season_str}/schedule/{season_str}-Premier-League-Scores-and-Fixtures"
 
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'}
-
-    print(f"{season_str} sezonu için FBref'ten veri çekiliyor...")
+    print(f"{season_str} sezonu için FBref'ten veri çekiliyor (Selenium Manager kullanılıyor)...")
 
     try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        print(f"URL çekilemedi: {e}")
+        # 2. Sayfaya git
+        driver.get(url)
+
+        # 3. Sayfanın tam olarak yüklenmesini ve tablonun görünür olmasını bekle
+        wait = WebDriverWait(driver, 10)
+        # Tablonun ID'si, gizlenmiş HTML'deki ID ile aynı. Bu ID'li elementin var olmasını bekliyoruz.
+        table_id = f"sched_ks_{season_str}_9"
+        wait.until(EC.presence_of_element_located((By.ID, table_id)))
+
+        # 4. Sayfanın son halinin HTML'ini al
+        html_content = driver.page_source
+
+    except Exception as e:
+        print(f"Selenium ile sayfa yüklenirken bir hata oluştu: {e}")
+        driver.quit()
         return None
+    finally:
+        # Hata olsa da olmasa da tarayıcıyı kapat
+        driver.quit()
+        print("Selenium tarayıcısı kapatıldı.")
 
-    # BeautifulSoup'u kullanarak tüm HTML'i ayrıştır
-    soup = BeautifulSoup(response.text, 'html.parser')
+    # 5. Artık elimizde tam ve işlenmiş HTML var, gerisi BeautifulSoup'un işi
+    soup = BeautifulSoup(html_content, 'html.parser')
 
-    # Sayfa içindeki tüm yorumları (Comment) bul
+    # Bazı durumlarda veri hala yorum içinde olabilir, bu yüzden kontrol edelim.
     comments = soup.find_all(string=lambda text: isinstance(text, Comment))
-
     table_html = ""
-    # Aradığımız tabloyu içeren yorumu bul
     for comment in comments:
         if "Scores & Fixtures" in comment:
-            # Yorumu temizleyip içindeki HTML'i al
             table_html = comment
             break
 
+    # Eğer veri yorum içinde DEĞİLSE, doğrudan HTML'in kendisini kullan
     if not table_html:
-        print("Maç tablosunu içeren yorum bloğu bulunamadı.")
-        return None
+        table_soup = soup
+    else:
+        table_soup = BeautifulSoup(table_html, 'html.parser')
 
-    # Sadece yorumun içindeki HTML'i tekrar BeautifulSoup ile ayrıştır
-    table_soup = BeautifulSoup(table_html, 'html.parser')
-
-    # Şimdi tabloyu bu temizlenmiş HTML içinde arayabiliriz
-    # ID değişmiş olabilir, bu yüzden daha genel bir arama yapalım: class='stats_table'
     table = table_soup.find('table', class_='stats_table')
 
     if not table or not table.tbody:
@@ -62,33 +80,4 @@ def scrape_fbref_season(season_start_year):
         cells = row.find_all('td')
 
         if len(cells) < 5 or not cells[3].get_text(strip=True):
-            continue
-
-        home_team = cells[2].get_text(strip=True)
-        score_text = cells[3].get_text(strip=True)
-        away_team = cells[4].get_text(strip=True)
-
-        if '–' in score_text:
-            score = score_text.split('–')
-            try:
-                match_data = {
-                    'hafta': cells[0].get_text(strip=True),
-                    'ev_sahibi': home_team,
-                    'deplasman': away_team,
-                    'ev_sahibi_gol': int(score[0]),
-                    'deplasman_gol': int(score[1])
-                }
-                matches.append(match_data)
-            except (ValueError, IndexError):
-                print(f"Hatalı skor formatı, atlanıyor: {score_text}")
-                continue
-
-    print(f"{len(matches)} adet maç başarıyla çekildi.")
-    return matches
-
-
-if __name__ == '__main__':
-    scraped_matches = scrape_fbref_season(2022)
-    if scraped_matches:
-        for match in scraped_matches[:5]:
-            print(match)
+            conti
