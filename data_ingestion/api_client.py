@@ -1,6 +1,7 @@
 import configparser
 import requests
 import os
+import json
 
 
 def get_api_key():
@@ -87,15 +88,12 @@ def get_teams_by_league_and_season(league_id, season):
 
 def get_fixtures_by_league_and_season(league_id, season):
     """
-    Belirtilen lig ve sezondaki tüm maçların sonuçlarını çeker.
-    :param league_id: API'nin lig için belirlediği ID
-    :param season: Sezon yılı
-    :return: Maç bilgilerini içeren bir liste veya hata durumunda None
+    Belirtilen lig ve sezondaki tüm maçların TEMEL sonuçlarını çeker.
     """
     endpoint = "/fixtures"
     params = {'league': league_id, 'season': season}
 
-    print(f"-> {season} sezonu için maç verileri çekiliyor...")
+    print(f"-> {season} sezonu için temel maç verileri çekiliyor...")
 
     response = requests.get(API_URL + endpoint, headers=HEADERS, params=params)
 
@@ -104,11 +102,10 @@ def get_fixtures_by_league_and_season(league_id, season):
 
         matches_list = []
         for fixture in api_response:
-            # Sadece bitmiş maçları ve golleri olanları alalım
-            if fixture['fixture']['status']['short'] == 'FT' and fixture['goals']['home'] is not None:
+            # Sadece bitmiş maçları alalım
+            if fixture['fixture']['status']['short'] == 'FT':
                 match_info = {
                     'api_mac_id': fixture['fixture']['id'],
-                    'sezon_araligi': fixture['league']['season'],
                     'hafta': int(fixture['league']['round'].split(' - ')[-1]),
                     'mac_tarihi': fixture['fixture']['date'],
                     'ev_sahibi_takim_id': fixture['teams']['home']['id'],
@@ -122,6 +119,48 @@ def get_fixtures_by_league_and_season(league_id, season):
         return matches_list
     else:
         print(f"Hata! Maç verisi çekilemedi. Durum Kodu: {response.status_code}")
+        return None
+
+
+def get_statistics_by_fixture(fixture_id):
+    """
+    Tek bir maçın ID'sini kullanarak o maça ait detaylı istatistikleri çeker.
+    :param fixture_id: API'nin maça verdiği benzersiz ID.
+    :return: İstatistikleri içeren bir sözlük veya hata durumunda None.
+    """
+    endpoint = "/fixtures/statistics"
+    params = {'fixture': fixture_id}
+
+    # Bu fonksiyon çok sık çağrılacağı için print mesajı eklemiyoruz, ana script yönetecek.
+    response = requests.get(API_URL + endpoint, headers=HEADERS, params=params)
+
+    if response.status_code == 200:
+        api_response = response.json()['response']
+
+        # API bazen boş yanıt dönebilir, kontrol edelim
+        if not api_response:
+            return None
+
+        home_team_id = api_response[0]['team']['id']
+        home_stats = api_response[0]['statistics']
+        away_stats = api_response[1]['statistics']
+
+        # Veriyi ayıklayıp temiz bir sözlük formatında döndürelim
+        stats_data = {
+            'api_mac_id': fixture_id,
+            'ev_sahibi_sut': next((s.get('value') for s in home_stats if s.get('type') == 'Total Shots'), None),
+            'deplasman_sut': next((s.get('value') for s in away_stats if s.get('type') == 'Total Shots'), None),
+            'ev_sahibi_isabetli_sut': next((s.get('value') for s in home_stats if s.get('type') == 'Shots on Goal'),
+                                           None),
+            'deplasman_isabetli_sut': next((s.get('value') for s in away_stats if s.get('type') == 'Shots on Goal'),
+                                           None),
+            'ev_sahibi_korner': next((s.get('value') for s in home_stats if s.get('type') == 'Corner Kicks'), None),
+            'deplasman_korner': next((s.get('value') for s in away_stats if s.get('type') == 'Corner Kicks'), None)
+        }
+        return stats_data
+    else:
+        # Hata durumunda, hatayı ve hangi maç ID'sinde olduğunu belirtelim
+        print(f"Hata! {fixture_id} ID'li maç için istatistik çekilemedi. Durum Kodu: {response.status_code}")
         return None
 
 # Bu dosya doğrudan çalıştırıldığında bağlantıyı test etmesi için:

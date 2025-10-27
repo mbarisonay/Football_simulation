@@ -1,0 +1,70 @@
+{
+    "fixture": {
+        "id": 710556,
+        "referee": "M. Oliver",
+        "timezone": "UTC",
+        "date": "2021-08-13T19:00:00+00:00",
+        "timestamp": 1628881200,
+        "periods": {
+            "first": 1628881200,
+            "second": 1628884800
+        },
+        "venue": {
+            "id": 10503,
+            "name": "Brentford Community Stadium",
+            "city": "Brentford, Middlesex"
+        },
+        "status": {
+            "long": "Match Finished",
+            "short": "FT",
+            "elapsed": 90,
+            "extra": null
+        }
+    },
+    "league": {
+        "id": 39,
+        "name": "Premier League",
+        "country": "England",
+        "logo": "https://media.api-sports.io/football/leagues/39.png",
+        "flag": "https://media.api-sports.io/flags/gb-eng.svg",
+        "season": 2021,
+        "round": "Regular Season - 1",
+        "standings": true
+    },
+    "teams": {
+        "home": {
+            "id": 55,
+            "name": "Brentford",
+            "logo": "https://media.api-sports.io/football/teams/55.png",
+            "winner": true
+        },
+        "away": {
+            "id": 42,
+            "name": "Arsenal",
+            "logo": "https://media.api-sports.io/football/teams/42.png",
+            "winner": false
+        }
+    },
+    "goals": {
+        "home": 2,
+        "away": 0
+    },
+    "score": {
+        "halftime": {
+            "home": 1,
+            "away": 0
+        },
+        "fulltime": {
+            "home": 2,
+            "away": 0
+        },
+        "extratime": {
+            "home": null,
+            "away": null
+        },
+        "penalty": {
+            "home": null,
+            "away": null
+        }
+    }
+}
