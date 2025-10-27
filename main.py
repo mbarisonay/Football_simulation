@@ -50,3 +50,4 @@ if __name__ == '__main__':
     print("----- GEÇMİŞ VERİLERİ ÇEKME İŞLEMİ BAŞLATILIYOR -----")
     ingest_past_data()
     print("\n----- TÜM İŞLEMLER TAMAMLANDI -----")
+
