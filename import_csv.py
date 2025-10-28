@@ -1,4 +1,4 @@
-# import_csv.py (Zengin CSV için Nihai Aktarım Scripti)
+# import_csv.py (En Son CSV'ye Göre Düzeltilmiş Nihai Versiyon)
 
 import pandas as pd
 import sqlite3
@@ -7,11 +7,14 @@ import sys
 from datetime import datetime
 
 # --- AYARLAR ---
+# Lütfen CSV dosyanızın adını ve uzantısını tam olarak buraya yazın.
 CSV_DOSYA_ADI = 'epl_final.csv'
 DATABASE_NAME = 'futbol_veritabani.db'
 
 
 def import_all_data_from_csv():
+    """CSV dosyasındaki tüm veriyi okur ve nihai yapıdaki SQLite veritabanına aktarır."""
+
     if os.path.exists(DATABASE_NAME):
         os.remove(DATABASE_NAME)
         print(f"Eski '{DATABASE_NAME}' dosyası silindi.")
@@ -29,22 +32,39 @@ def import_all_data_from_csv():
     conn = sqlite3.connect(DATABASE_NAME)
     cursor = conn.cursor()
 
+    # --- Tarih ve Sezon İşleme ---
+    def parse_date(date_str):
+        for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%d/%m/%y'):
+            try:
+                return datetime.strptime(str(date_str), fmt)
+            except:
+                continue
+        return None
+
+    # 'Date' yerine CSV'deki gerçek sütun adı olan 'MatchDate' kullanılıyor
+    df['mac_tarihi_dt'] = df['MatchDate'].apply(parse_date)
+    df.dropna(subset=['mac_tarihi_dt'], inplace=True)
+
+    # Sezonu TİRELİ (-) formatta oluştur
+    df['sezon_araligi'] = df['mac_tarihi_dt'].apply(
+        lambda dt: f"{dt.year - 1}-{dt.year}" if dt.month < 8 else f"{dt.year}-{dt.year + 1}"
+    )
+    df['mac_tarihi'] = df['mac_tarihi_dt'].dt.strftime('%Y-%m-%d')
+
     # Takımları ve Sezonları Ekle
     all_teams = set(df['HomeTeam'].unique()) | set(df['AwayTeam'].unique())
     teams_to_insert = [(team,) for team in all_teams if pd.notna(team)]
     cursor.executemany('INSERT INTO Takimlar (takim_adi) VALUES (?)', teams_to_insert)
     print(f"{len(teams_to_insert)} benzersiz takım eklendi.")
 
-    all_seasons = df['Season'].unique()
+    all_seasons = df['sezon_araligi'].unique()
     seasons_to_insert = [(season, 'Premier League') for season in all_seasons if pd.notna(season)]
-    cursor.executemany('INSERT INTO Sezonlar (sezon_araligi, lig_adi) VALUES (?)', seasons_to_insert)
+    cursor.executemany('INSERT INTO Sezonlar (sezon_araligi, lig_adi) VALUES (?, ?)', seasons_to_insert)
     print(f"{len(seasons_to_insert)} benzersiz sezon eklendi.")
     conn.commit()
 
     # Maç verilerini hazırlarken sütunları doğru şekilde yeniden adlandır
     matches_df = df.rename(columns={
-        'Season': 'sezon_araligi',
-        'MatchDate': 'mac_tarihi',
         'HomeTeam': 'ev_sahibi_takim',
         'AwayTeam': 'deplasman_takim',
         'FullTimeHomeGoals': 'ev_sahibi_gol',
@@ -64,7 +84,6 @@ def import_all_data_from_csv():
         'AwayRedCards': 'deplasman_kirmizi_kart'
     })
 
-    # Veritabanımızdaki sütunlarla eşleşen bir liste oluşturalım
     final_columns = [
         'sezon_araligi', 'mac_tarihi', 'ev_sahibi_takim', 'deplasman_takim', 'ev_sahibi_gol',
         'deplasman_gol', 'sonuc', 'ev_sahibi_sut', 'deplasman_sut', 'ev_sahibi_isabetli_sut',
@@ -73,7 +92,6 @@ def import_all_data_from_csv():
         'ev_sahibi_kirmizi_kart', 'deplasman_kirmizi_kart'
     ]
 
-    # Sadece bu sütunları alarak DataFrame'i temizle
     matches_df = matches_df[final_columns]
 
     matches_df.to_sql('Maclar', conn, if_exists='append', index=False)
@@ -86,5 +104,6 @@ def import_all_data_from_csv():
 if __name__ == '__main__':
     project_root = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, project_root)
+
     import_all_data_from_csv()
     print("\nVeri aktarımı tamamlandı!")
