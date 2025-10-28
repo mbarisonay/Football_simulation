@@ -130,6 +130,3 @@ def main_loop():
             print("\nHATA: Geçersiz format!")
             print("Lütfen sezonu '2003-2004' gibi YYYY-YYYY formatında girin.")
 
-
-if __name__ == '__main__':
-    main_loop()
