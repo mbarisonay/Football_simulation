@@ -92,3 +92,12 @@ def get_matches_by_season(season_range):
 
     print(f"\n{season_range} sezonu için veritabanından {len(matches)} maç ve tüm istatistikleri çekildi.")
     return matches
+
+def get_all_teams():
+    """Veritabanındaki tüm takımların adlarını bir liste olarak döndürür."""
+    connection = sqlite3.connect(DATABASE_NAME)
+    cursor = connection.cursor()
+    cursor.execute("SELECT takim_adi FROM Takimlar")
+    teams = [row[0] for row in cursor.fetchall()]
+    connection.close()
+    return teams
