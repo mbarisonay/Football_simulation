@@ -20,8 +20,8 @@ sys.path.insert(0, project_root)
 # Ayarlar
 # --------------------------------------
 BASE_URL = "https://www.transfermarkt.com"
-SEASONS = list(range(2023, 2024))  # Test için sadece 1 sezon çalıştıralım
-OUTPUT_FILE = "premier_league_squads_test.csv"
+SEASONS = list(range(2000, 2025))  # Test için sadece 1 sezon çalıştıralım
+OUTPUT_FILE = "premier_league_squads_2000_2025.csv"
 all_data = []
 
 # --- TAKIM EŞLEŞTİRME SÖZLÜĞÜ (EN ÖNEMLİ KISIM) ---
