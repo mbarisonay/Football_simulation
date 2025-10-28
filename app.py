@@ -137,7 +137,7 @@ def show_full_season_simulation_menu():
         return
 
     # 1. Referans sezonun güçlerini ve lig ortalamalarını hesapla
-    strengths, error = calculate_team_strengths(season_input)
+    strengths, error = calculate_team_profiles(season_input)
     if error:
         print(f"\nHATA: {error}");
         return
