@@ -1,20 +1,23 @@
-# database/db_manager.py (Nihai Kurulum Versiyonu)
+# database/db_manager.py (Doğru ve Sade Versiyon)
 
 import sqlite3
+import os
 
-DATABASE_NAME = 'futbol_veritabani.db'
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+# Projenin kök dizinine çık: ../
+_project_root = os.path.dirname(_current_dir)
+# Veritabanının tam yolunu oluştur: ../futbol_veritabani.db
+DATABASE_NAME = os.path.join(_project_root, 'futbol_veritabani.db')
 
 
 def create_final_database_structure():
     """
-    Hem CSV'den gelen zengin maç verilerini hem de gelecekteki oyuncu verilerini
-    barındıracak nihai veritabanı yapısını oluşturur.
+    CSV'den gelen temel maç sonuçlarını barındıracak nihai veritabanı yapısını oluşturur.
     """
     connection = sqlite3.connect(DATABASE_NAME)
     cursor = connection.cursor()
 
     # --- TABLO 1: Takimlar ---
-    # Sadece benzersiz takım isimlerini tutar.
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS Takimlar (
         takim_adi TEXT PRIMARY KEY
@@ -22,7 +25,6 @@ def create_final_database_structure():
     ''')
 
     # --- TABLO 2: Sezonlar ---
-    # Sezon bilgilerini tutar (örn: '2000-2001', 'Premier League')
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS Sezonlar (
         sezon_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,8 +33,7 @@ def create_final_database_structure():
     )
     ''')
 
-    # --- TABLO 3: Maclar ---
-    # CSV'den gelen tüm zengin maç istatistiklerini içerir.
+    # --- TABLO 3: Maclar (SADELEŞTİRİLDİ) ---
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS Maclar (
         mac_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,69 +44,40 @@ def create_final_database_structure():
         ev_sahibi_gol INTEGER,
         deplasman_gol INTEGER,
         sonuc TEXT,
-        ev_sahibi_sut INTEGER,
-        deplasman_sut INTEGER,
-        ev_sahibi_isabetli_sut INTEGER,
-        deplasman_isabetli_sut INTEGER,
-        ev_sahibi_faul INTEGER,
-        deplasman_faul INTEGER,
-        ev_sahibi_korner INTEGER,
-        deplasman_korner INTEGER,
-        ev_sahibi_sari_kart INTEGER,
-        deplasman_sari_kart INTEGER,
-        ev_sahibi_kirmizi_kart INTEGER,
-        deplasman_kirmizi_kart INTEGER,
         FOREIGN KEY (sezon_araligi) REFERENCES Sezonlar (sezon_araligi),
         FOREIGN KEY (ev_sahibi_takim) REFERENCES Takimlar (takim_adi),
         FOREIGN KEY (deplasman_takim) REFERENCES Takimlar (takim_adi)
     )
     ''')
 
-    # --- GELECEK İÇİN HAZIRLIK (BU TABLOLAR BOŞ KALACAK) ---
-
-    # --- TABLO 4: Oyuncular ---
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS Oyuncular (
-        oyuncu_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        oyuncu_tam_adi TEXT NOT NULL UNIQUE
-    )
-    ''')
-
-    # --- TABLO 5: SezonKadrolari ---
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS SezonKadrolari (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        sezon_araligi TEXT,
-        takim_adi TEXT,
-        oyuncu_id INTEGER,
-        FOREIGN KEY (sezon_araligi) REFERENCES Sezonlar (sezon_araligi),
-        FOREIGN KEY (takim_adi) REFERENCES Takimlar (takim_adi),
-        FOREIGN KEY (oyuncu_id) REFERENCES Oyuncular (oyuncu_id)
-    )
-    ''')
-
-    # --- TABLO 6: OyuncuMacIstatistikleri ---
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS OyuncuMacIstatistikleri (
-        istatistik_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        mac_id INTEGER,
-        oyuncu_id INTEGER,
-        takim_adi TEXT,
-        oynadigi_dakika INTEGER,
-        gol INTEGER,
-        asist INTEGER,
-        puan REAL,
-        FOREIGN KEY (mac_id) REFERENCES Maclar (mac_id),
-        FOREIGN KEY (oyuncu_id) REFERENCES Oyuncular (oyuncu_id),
-        FOREIGN KEY (takim_adi) REFERENCES Takimlar (takim_adi)
-    )
-    ''')
-
-    print(f"'{DATABASE_NAME}' için nihai veritabanı yapısı başarıyla kontrol edildi/oluşturuldu.")
+    print(f"'{DATABASE_NAME}' için nihai ve sadeleştirilmiş yapı başarıyla kontrol edildi/oluşturuldu.")
 
     connection.commit()
     connection.close()
 
+
+def get_matches_by_season(season_range):
+    """
+    Belirtilen sezondaki tüm maçları veritabanından çeker.
+    :param season_range: Sezon aralığı (Örn: '2003-2004')
+    :return: Maç bilgilerini içeren bir liste.
+    """
+    connection = sqlite3.connect(DATABASE_NAME)
+    connection.row_factory = sqlite3.Row
+    cursor = connection.cursor()
+
+    query = """
+    SELECT ev_sahibi_takim, deplasman_takim, ev_sahibi_gol, deplasman_gol
+    FROM Maclar
+    WHERE sezon_araligi = ?
+    """
+
+    cursor.execute(query, (season_range,))
+    matches = [dict(row) for row in cursor.fetchall()]
+    connection.close()
+
+    print(f"\n{season_range} sezonu için veritabanından {len(matches)} maç çekildi.")
+    return matches
 
 if __name__ == '__main__':
     create_final_database_structure()
