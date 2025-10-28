@@ -12,7 +12,7 @@ from database.db_manager import get_matches_by_season
 
 def calculate_team_profiles(season_range):
     """
-    Belirtilen sezon için her takımın gol, şut, korner vb. gibi
+    Belirtilen sezon için her takımın gol, şut, korner, kart vb. gibi
     istatistiksel profillerini ve göreceli güçlerini hesaplar.
     """
     matches = get_matches_by_season(season_range)
@@ -20,18 +20,15 @@ def calculate_team_profiles(season_range):
         return None, None, "Belirtilen sezon için maç bulunamadı."
 
     df = pd.DataFrame(matches)
-
-    # DataFrame'deki None/NaN değerlerini 0 ile doldurarak hesaplama hatalarını önle
     df.fillna(0, inplace=True)
 
-    # 1. Adım: Ligin Genel Ortalamalarını Hesapla
     league_averages = {
-        'avg_home_goals': df['ev_sahibi_gol'].mean(),
-        'avg_away_goals': df['deplasman_gol'].mean(),
-        'avg_home_shots': df['ev_sahibi_sut'].mean(),
-        'avg_away_shots': df['deplasman_sut'].mean(),
-        'avg_home_corners': df['ev_sahibi_korner'].mean(),
-        'avg_away_corners': df['deplasman_korner'].mean()
+        'avg_home_goals': df['ev_sahibi_gol'].mean(), 'avg_away_goals': df['deplasman_gol'].mean(),
+        'avg_home_shots': df['ev_sahibi_sut'].mean(), 'avg_away_shots': df['deplasman_sut'].mean(),
+        'avg_home_sot': df['ev_sahibi_isabetli_sut'].mean(), 'avg_away_sot': df['deplasman_isabetli_sut'].mean(),
+        'avg_home_corners': df['ev_sahibi_korner'].mean(), 'avg_away_corners': df['deplasman_korner'].mean(),
+        'avg_home_yellow': df['ev_sahibi_sari_kart'].mean(), 'avg_away_yellow': df['deplasman_sari_kart'].mean(),
+        'avg_home_red': df['ev_sahibi_kirmizi_kart'].mean(), 'avg_away_red': df['deplasman_kirmizi_kart'].mean()
     }
 
     team_profiles = {}
@@ -41,52 +38,37 @@ def calculate_team_profiles(season_range):
         home_games = df[df['ev_sahibi_takim'] == team]
         away_games = df[df['deplasman_takim'] == team]
 
-        # 2. Adım: Her takımın kendi ortalamalarını hesapla
-        # Hücum İstatistikleri (Ürettiği)
-        home_attack_avg = {
-            'goals': home_games['ev_sahibi_gol'].mean(),
-            'shots': home_games['ev_sahibi_sut'].mean(),
-            'corners': home_games['ev_sahibi_korner'].mean()
-        }
-        away_attack_avg = {
-            'goals': away_games['deplasman_gol'].mean(),
-            'shots': away_games['deplasman_sut'].mean(),
-            'corners': away_games['deplasman_korner'].mean()
-        }
-
-        # Savunma İstatistikleri (İzin Verdiği)
-        home_defense_avg = {
-            'goals': home_games['deplasman_gol'].mean(),
-            'shots': home_games['deplasman_sut'].mean(),
-            'corners': home_games['deplasman_korner'].mean()
-        }
-        away_defense_avg = {
-            'goals': away_games['ev_sahibi_gol'].mean(),
-            'shots': away_games['ev_sahibi_sut'].mean(),
-            'corners': away_games['ev_sahibi_korner'].mean()
-        }
-
-        # 3. Adım: Göreceli Güç Skorlarını Hesapla
         team_profiles[team] = {
             'home_attack_strength': {
-                'goals': home_attack_avg['goals'] / league_averages['avg_home_goals'],
-                'shots': home_attack_avg['shots'] / league_averages['avg_home_shots'],
-                'corners': home_attack_avg['corners'] / league_averages['avg_home_corners']
+                'goals': (home_games['ev_sahibi_gol'].mean()) / league_averages['avg_home_goals'],
+                'shots': (home_games['ev_sahibi_sut'].mean()) / league_averages['avg_home_shots'],
+                'sot': (home_games['ev_sahibi_isabetli_sut'].mean()) / league_averages['avg_home_sot'],
+                'corners': (home_games['ev_sahibi_korner'].mean()) / league_averages['avg_home_corners']
             },
             'away_attack_strength': {
-                'goals': away_attack_avg['goals'] / league_averages['avg_away_goals'],
-                'shots': away_attack_avg['shots'] / league_averages['avg_away_shots'],
-                'corners': away_attack_avg['corners'] / league_averages['avg_away_corners']
+                'goals': (away_games['deplasman_gol'].mean()) / league_averages['avg_away_goals'],
+                'shots': (away_games['deplasman_sut'].mean()) / league_averages['avg_away_shots'],
+                'sot': (away_games['deplasman_isabetli_sut'].mean()) / league_averages['avg_away_sot'],
+                'corners': (away_games['deplasman_korner'].mean()) / league_averages['avg_away_corners']
             },
             'home_defense_strength': {
-                'goals': home_defense_avg['goals'] / league_averages['avg_away_goals'],
-                'shots': home_defense_avg['shots'] / league_averages['avg_away_shots'],
-                'corners': home_defense_avg['corners'] / league_averages['avg_away_corners']
+                'goals': (home_games['deplasman_gol'].mean()) / league_averages['avg_away_goals'],
+                'shots': (home_games['deplasman_sut'].mean()) / league_averages['avg_away_shots'],
+                'sot': (home_games['deplasman_isabetli_sut'].mean()) / league_averages['avg_away_sot'],
+                'corners': (home_games['deplasman_korner'].mean()) / league_averages['avg_away_corners']
             },
             'away_defense_strength': {
-                'goals': away_defense_avg['goals'] / league_averages['avg_home_goals'],
-                'shots': away_defense_avg['shots'] / league_averages['avg_home_shots'],
-                'corners': away_defense_avg['corners'] / league_averages['avg_home_corners']
+                'goals': (away_games['ev_sahibi_gol'].mean()) / league_averages['avg_home_goals'],
+                'shots': (away_games['ev_sahibi_sut'].mean()) / league_averages['avg_home_shots'],
+                'sot': (away_games['ev_sahibi_isabetli_sut'].mean()) / league_averages['avg_home_sot'],
+                'corners': (away_games['ev_sahibi_korner'].mean()) / league_averages['avg_home_corners']
+            },
+            # Kartlar "hücum/savunma" değil, "disiplin" profilidir
+            'discipline_profile': {
+                'home_yellow': (home_games['ev_sahibi_sari_kart'].mean()) / league_averages['avg_home_yellow'],
+                'away_yellow': (away_games['deplasman_sari_kart'].mean()) / league_averages['avg_away_yellow'],
+                'home_red': (home_games['ev_sahibi_kirmizi_kart'].mean()) / league_averages['avg_home_red'],
+                'away_red': (away_games['deplasman_kirmizi_kart'].mean()) / league_averages['avg_away_red'],
             }
         }
 

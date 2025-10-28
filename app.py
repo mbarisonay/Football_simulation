@@ -94,37 +94,46 @@ def show_single_match_simulation_menu():
     print("\n--- O SEZONDAKİ TAKIMLAR ---")
     for i, team in enumerate(team_list, 1): print(f"{i}. {team}")
 
+    # --- EKSİK OLAN VE GERİ EKLENEN BÖLÜM BURASI ---
     home_team_name = input("\nEv sahibi takımı seçin (isim veya numara): ")
     away_team_name = input("Deplasman takımını seçin (isim veya numara): ")
 
     def find_team(user_input, teams):
-        if user_input.isdigit() and 1 <= int(user_input) <= len(teams): return teams[int(user_input) - 1]
+        if user_input.isdigit() and 1 <= int(user_input) <= len(teams):
+            return teams[int(user_input) - 1]
         for team in teams:
-            if user_input.lower() == team.lower(): return team
+            if user_input.lower() == team.lower():
+                return team
         return None
 
     home_team = find_team(home_team_name, team_list)
     away_team = find_team(away_team_name, team_list)
+    # -----------------------------------------------
 
     if not home_team or not away_team:
         print("\nHATA: Takım adlarından biri veya her ikisi de geçersiz. Ana menüye dönülüyor.")
         return
 
-    # Simülasyonu çalıştır
     simulated_stats = simulate_match(profiles[home_team], profiles[away_team], league_averages)
 
-    # --- YENİ VE GÜZEL ÇIKTI FORMATI ---
-    print("\n" + "=" * 40)
-    print(" " * 12 + "SİMÜLASYON SONUCU")
-    print("=" * 40)
+    print("\n" + "=" * 45)
+    print(" " * 14 + "SİMÜLASYON SONUCU")
+    print("=" * 45)
     print(f"SEZON: {season_input}")
-    print(f"{'':<15} | {'EV SAHİBİ':<12} | {'DEPLASMAN':<12}")
-    print(f"{'-' * 15} | {'-' * 12} | {'-' * 12}")
-    print(f"{'TAKIM':<15} | {home_team:<12} | {away_team:<12}")
-    print(f"{'GOL':<15} | {simulated_stats['ev_sahibi_gol']:<12} | {simulated_stats['deplasman_gol']:<12}")
-    print(f"{'ŞUT':<15} | {simulated_stats['ev_sahibi_sut']:<12} | {simulated_stats['deplasman_sut']:<12}")
-    print(f"{'KORNER':<15} | {simulated_stats['ev_sahibi_korner']:<12} | {simulated_stats['deplasman_korner']:<12}")
-    print("=" * 40)
+    print(f"{'İstatistik':<20} | {'EV SAHİBİ':<12} | {'DEPLASMAN':<12}")
+    print(f"{'-' * 20} | {'-' * 12} | {'-' * 12}")
+    print(f"{'TAKIM':<20} | {home_team:<12} | {away_team:<12}")
+    print(f"{'GOL':<20} | {simulated_stats['ev_sahibi_gol']:<12} | {simulated_stats['deplasman_gol']:<12}")
+    print(f"{'TOPLAM ŞUT':<20} | {simulated_stats['ev_sahibi_sut']:<12} | {simulated_stats['deplasman_sut']:<12}")
+    print(
+        f"{'İSABETLİ ŞUT':<20} | {simulated_stats['ev_sahibi_isabetli_sut']:<12} | {simulated_stats['deplasman_isabetli_sut']:<12}")
+    print(f"{'KORNER':<20} | {simulated_stats['ev_sahibi_korner']:<12} | {simulated_stats['deplasman_korner']:<12}")
+    print(
+        f"{'SARI KART':<20} | {simulated_stats['ev_sahibi_sari_kart']:<12} | {simulated_stats['deplasman_sari_kart']:<12}")
+    print(
+        f"{'KIRMIZI KART':<20} | {simulated_stats['ev_sahibi_kirmizi_kart']:<12} | {simulated_stats['deplasman_kirmizi_kart']:<12}")
+    print("=" * 45)
+
 
 # --- YENİ SEZON SİMÜLASYON MENÜSÜ ---
 def show_full_season_simulation_menu():

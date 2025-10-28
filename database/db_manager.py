@@ -69,25 +69,19 @@ def create_database_structure():
 def get_matches_by_season(season_range):
     """
     Belirtilen sezondaki tüm maçları ve simülasyon için gerekli
-    tüm istatistikleri (gol, şut, korner) veritabanından çeker.
+    tüm istatistikleri veritabanından çeker.
     """
     connection = sqlite3.connect(DATABASE_NAME)
     connection.row_factory = sqlite3.Row
     cursor = connection.cursor()
 
-    # SQL sorgusuna, takım profili hesaplaması için gereken tüm sütunları ekliyoruz.
+    # Sorguya İSABETLİ ŞUT ve KART sütunlarını ekliyoruz
     query = """
     SELECT 
-        ev_sahibi_takim, 
-        deplasman_takim, 
-        ev_sahibi_gol, 
-        deplasman_gol,
-        ev_sahibi_sut, 
-        deplasman_sut, 
-        ev_sahibi_isabetli_sut, 
-        deplasman_isabetli_sut,
-        ev_sahibi_korner,
-        deplasman_korner
+        ev_sahibi_takim, deplasman_takim, ev_sahibi_gol, deplasman_gol,
+        ev_sahibi_sut, deplasman_sut, ev_sahibi_isabetli_sut, deplasman_isabetli_sut,
+        ev_sahibi_korner, deplasman_korner, ev_sahibi_sari_kart, deplasman_sari_kart,
+        ev_sahibi_kirmizi_kart, deplasman_kirmizi_kart
     FROM Maclar
     WHERE sezon_araligi = ?
     """
@@ -96,5 +90,5 @@ def get_matches_by_season(season_range):
     matches = [dict(row) for row in cursor.fetchall()]
     connection.close()
 
-    print(f"\n{season_range} sezonu için veritabanından {len(matches)} maç ve detaylı istatistikleri çekildi.")
+    print(f"\n{season_range} sezonu için veritabanından {len(matches)} maç ve tüm istatistikleri çekildi.")
     return matches
