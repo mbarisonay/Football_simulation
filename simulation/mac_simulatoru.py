@@ -1,71 +1,64 @@
-# simulation/mac_simulatoru.py
+# simulation/mac_simulatoru.py (V2.0 - Çoklu İstatistik Simülasyonu)
 
 import numpy as np
 
 
-def predict_score(home_attack, away_defense, avg_home_goals):
+def predict_stat(attack_strength, defense_strength, avg_league_stat):
     """
-    Ev sahibi takımın atması beklenen gol sayısını (lambda) hesaplar ve
-    bu beklentiye göre Poisson dağılımını kullanarak bir gol sayısı simüle eder.
+    Belirli bir istatistik (gol, şut, korner) için beklenen değeri hesaplar
+    ve Poisson dağılımına göre o maçlık bir değer üretir.
     """
-    # Beklenen gol sayısı = Ev sahibinin hücum gücü * Deplasmanın savunma gücü * Ligin ev sahibi gol ortalaması
-    lambda_home = home_attack * away_defense * avg_home_goals
+    # Beklenen değer = Takımın ilgili hücum gücü * Rakibin ilgili savunma gücü * Ligin ilgili ortalaması
+    lambda_val = attack_strength * defense_strength * avg_league_stat
 
-    # Poisson dağılımına göre rastgele bir gol sayısı üret
-    # Bu, "beklenen ortalama bu ise, bu maçta kaç gol olur?" sorusunun olasılıksal cevabıdır.
-    return np.random.poisson(lam=lambda_home, size=1)[0]
+    # Negatif bir beklenti olamayacağından emin olalım
+    if lambda_val < 0:
+        lambda_val = 0
+
+    return np.random.poisson(lam=lambda_val, size=1)[0]
 
 
-def simulate_match(home_team_strength, away_team_strength, league_averages):
+def simulate_match(home_team_profile, away_team_profile, league_averages):
     """
-    İki takımın güç skorlarını ve lig ortalamalarını alarak tek bir maçın
-    skorunu simüle eder.
+    İki takımın ZENGİNLEŞTİRİLMİŞ profillerini kullanarak tek bir maçın
+    skorunu ve diğer istatistiklerini simüle eder.
     """
-    # Ev sahibi takımın gollerini tahmin et
-    home_goals = predict_score(
-        home_attack=home_team_strength['home_attack'],
-        away_defense=away_team_strength['away_defense'],
-        avg_home_goals=league_averages['avg_home_goals']
+    # Ev sahibi takımın istatistiklerini tahmin et
+    home_goals = predict_stat(
+        attack_strength=home_team_profile['home_attack_strength']['goals'],
+        defense_strength=away_team_profile['away_defense_strength']['goals'],
+        avg_league_stat=league_averages['avg_home_goals']
+    )
+    home_shots = predict_stat(
+        attack_strength=home_team_profile['home_attack_strength']['shots'],
+        defense_strength=away_team_profile['away_defense_strength']['shots'],
+        avg_league_stat=league_averages['avg_home_shots']
+    )
+    home_corners = predict_stat(
+        attack_strength=home_team_profile['home_attack_strength']['corners'],
+        defense_strength=away_team_profile['away_defense_strength']['corners'],
+        avg_league_stat=league_averages['avg_home_corners']
     )
 
-    # Deplasman takımının gollerini tahmin et
-    away_goals = predict_score(
-        home_attack=away_team_strength['away_attack'],  # Deplasman takımının DEPLASMAN hücum gücü
-        away_defense=home_team_strength['home_defense'],  # Ev sahibi takımının EV savunma gücü
-        avg_home_goals=league_averages['avg_away_goals']  # Ligin DEPLASMAN gol ortalaması
+    # Deplasman takımının istatistiklerini tahmin et
+    away_goals = predict_stat(
+        attack_strength=away_team_profile['away_attack_strength']['goals'],
+        defense_strength=home_team_profile['home_defense_strength']['goals'],
+        avg_league_stat=league_averages['avg_away_goals']
+    )
+    away_shots = predict_stat(
+        attack_strength=away_team_profile['away_attack_strength']['shots'],
+        defense_strength=home_team_profile['home_defense_strength']['shots'],
+        avg_league_stat=league_averages['avg_away_shots']
+    )
+    away_corners = predict_stat(
+        attack_strength=away_team_profile['away_attack_strength']['corners'],
+        defense_strength=home_team_profile['home_defense_strength']['corners'],
+        avg_league_stat=league_averages['avg_away_corners']
     )
 
-    return {'ev_sahibi_gol': home_goals, 'deplasman_gol': away_goals}
-
-
-if __name__ == '__main__':
-    # Bu dosyayı doğrudan çalıştırarak basit bir test yapalım
-
-    # Örnek: Güçlü bir ev sahibi (Man City) vs ortalama bir deplasman takımı (Everton)
-
-    # Man City'nin 2018-2019 güç skorları (takim_analizi.py'den alınmış gibi)
-    man_city_strength = {
-        'home_attack': 1.81, 'home_defense': 0.72,
-        'away_attack': 1.62, 'away_defense': 0.58
+    return {
+        'ev_sahibi_gol': home_goals, 'deplasman_gol': away_goals,
+        'ev_sahibi_sut': home_shots, 'deplasman_sut': away_shots,
+        'ev_sahibi_korner': home_corners, 'deplasman_korner': away_corners
     }
-
-    # Everton'ın 2018-2019 güç skorları
-    everton_strength = {
-        'home_attack': 1.07, 'home_defense': 0.91,
-        'away_attack': 0.89, 'away_defense': 1.05
-    }
-
-    # 2018-2019 sezonu lig ortalamaları
-    lig_ortalamalari = {
-        'avg_home_goals': 1.54,
-        'avg_away_goals': 1.25
-    }
-
-    print("--- TEK MAÇ SİMÜLASYONU TESTİ ---")
-    print("Simüle edilen maç: Manchester City (Ev Sahibi) vs Everton (Deplasman)")
-
-    # 10 farklı simülasyon yapıp sonuçları görelim
-    print("\n10 farklı simülasyon sonucu:")
-    for i in range(10):
-        skor = simulate_match(man_city_strength, everton_strength, lig_ortalamalari)
-        print(f"  Simülasyon {i + 1}: Man City {skor['ev_sahibi_gol']} - {skor['deplasman_gol']} Everton")
