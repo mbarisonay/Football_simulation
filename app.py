@@ -1,4 +1,4 @@
-# app.py (Tek Maç Simülasyonu Entegre Edilmiş Hali)
+# app.py (Tam Sezon Simülasyonu Entegre Edilmiş Nihai Hali)
 
 import sys
 import os
@@ -8,14 +8,14 @@ sys.path.insert(0, project_root)
 
 from simulation.v1_puan_durumu import calculate_league_table, is_valid_season_format
 from simulation.takim_analizi import calculate_team_strengths
-# Yeni simülatörümüzü import ediyoruz
 from simulation.mac_simulatoru import simulate_match
-# Lig ortalamalarını da hesaplamamız gerekecek, bu yüzden bu fonksiyonu da alıyoruz
+from simulation.sezon_simulatoru import run_season_simulation  # YENİ
 from database.db_manager import get_matches_by_season
 
 
+# Diğer menü fonksiyonları (show_team_strength_menu, show_league_table_menu) aynı kalıyor...
+# ... (Kodun uzun olmaması için buraya eklemiyorum, dosyanızda kalsınlar)
 def show_team_strength_menu():
-    # ... (Bu fonksiyon aynı kalıyor, değişiklik yok)
     while True:
         season_input = input(
             "\nTakım gücünü analiz etmek istediğiniz sezonu girin (Örn: 2018-2019) veya geri dönmek için 'g' yazın: ")
@@ -36,10 +36,7 @@ def show_team_strength_menu():
             if team_input.lower() == 'g': break
             found_team = None
             if team_input.isdigit():
-                try:
-                    if 1 <= int(team_input) <= len(team_list): found_team = team_list[int(team_input) - 1]
-                except:
-                    pass
+                if 1 <= int(team_input) <= len(team_list): found_team = team_list[int(team_input) - 1]
             if not found_team:
                 for team in team_list:
                     if team_input.lower() == team.lower(): found_team = team; break
@@ -55,80 +52,99 @@ def show_team_strength_menu():
 
 
 def show_league_table_menu():
-    # ... (Bu fonksiyon aynı kalıyor, değişiklik yok)
     while True:
         season_input = input(
             "\nPuan durumunu görmek istediğiniz sezonu girin (Örn: 2003-2004) veya geri dönmek için 'g' yazın: ")
         if season_input.lower() == 'g': break
         if is_valid_season_format(season_input):
-            calculate_league_table(season_input.replace('-', '/'))
+            calculate_league_table(season_input)
         else:
             print("\nHATA: Geçersiz format! Lütfen '2003-2004' gibi YYYY-YYYY formatında girin.")
 
 
-# --- YENİ EKLENEN FONKSİYON ---
 def show_single_match_simulation_menu():
-    """Tek maç simülasyonu menüsünü yönetir."""
     print("\n--- Tek Maç Simülasyonu ---")
-    season_input = input("Simülasyon için sezon seçin (Örn: 2018-2019): ")
-
-    if not is_valid_season_format(season_input):
-        print("\nHATA: Geçersiz sezon formatı!")
-        return
-
-    # 1. Seçilen sezon için güç skorlarını ve lig ortalamalarını hesapla
+    season_input = input("Simülasyon için referans alınacak sezonu seçin (Örn: 2018-2019): ")
+    if not is_valid_season_format(season_input): print("\nHATA: Geçersiz sezon formatı!"); return
     strengths, error = calculate_team_strengths(season_input)
-    if error:
-        print(f"\nHATA: {error}");
-        return
-
-    # Lig ortalamalarını almak için maç verisini tekrar çekiyoruz
+    if error: print(f"\nHATA: {error}"); return
     matches = get_matches_by_season(season_input)
-    league_averages = {
-        'avg_home_goals': sum(m['ev_sahibi_gol'] for m in matches) / len(matches),
-        'avg_away_goals': sum(m['deplasman_gol'] for m in matches) / len(matches)
-    }
-
+    if not matches: print(f"\nHATA: {season_input} için maç verisi bulunamadı."); return
+    league_averages = {'avg_home_goals': sum(m['ev_sahibi_gol'] for m in matches) / len(matches),
+                       'avg_away_goals': sum(m['deplasman_gol'] for m in matches) / len(matches)}
     team_list = sorted(strengths.keys())
     print("\n--- O SEZONDAKİ TAKIMLAR ---")
     for i, team in enumerate(team_list, 1): print(f"{i}. {team}")
-
-    # 2. Kullanıcıdan takımları al
     home_team_name = input("\nEv sahibi takımı seçin (isim veya numara): ")
     away_team_name = input("Deplasman takımını seçin (isim veya numara): ")
 
-    # 3. Girdileri gerçek takım isimlerine çevir
     def find_team(user_input, teams):
-        if user_input.isdigit() and 1 <= int(user_input) <= len(teams):
-            return teams[int(user_input) - 1]
+        if user_input.isdigit() and 1 <= int(user_input) <= len(teams): return teams[int(user_input) - 1]
         for team in teams:
-            if user_input.lower() == team.lower():
-                return team
+            if user_input.lower() == team.lower(): return team
         return None
 
     home_team = find_team(home_team_name, team_list)
     away_team = find_team(away_team_name, team_list)
-
-    if not home_team or not away_team:
-        print("\nHATA: Takım adlarından biri veya her ikisi de geçersiz. Ana menüye dönülüyor.")
-        return
-
-    # 4. Simülasyonu çalıştır ve sonucu göster
+    if not home_team or not away_team: print("\nHATA: Takım adları geçersiz."); return
     simulated_score = simulate_match(strengths[home_team], strengths[away_team], league_averages)
-
     print("\n--- SİMÜLASYON SONUCU ---")
     print(
         f"  {home_team} (Ev) {simulated_score['ev_sahibi_gol']} - {simulated_score['deplasman_gol']} {away_team} (Deplasman)")
 
 
-# --- ANA MENÜ GÜNCELLENDİ ---
+# --- YENİ SEZON SİMÜLASYON MENÜSÜ ---
+def show_full_season_simulation_menu():
+    """Tam sezon simülasyonu menüsünü yönetir."""
+    print("\n--- Tam Sezon Simülasyonu ---")
+    season_input = input("Simülasyon için referans alınacak sezonu seçin (Örn: 2018-2019): ")
+
+    if not is_valid_season_format(season_input):
+        print("\nHATA: Geçersiz sezon formatı!")
+        return
+
+    # 1. Referans sezonun güçlerini ve lig ortalamalarını hesapla
+    strengths, error = calculate_team_strengths(season_input)
+    if error:
+        print(f"\nHATA: {error}");
+        return
+
+    matches = get_matches_by_season(season_input)
+    if not matches:
+        print(f"\nHATA: {season_input} için maç verisi bulunamadı.");
+        return
+
+    league_averages = {
+        'avg_home_goals': sum(m['ev_sahibi_gol'] for m in matches) / len(matches),
+        'avg_away_goals': sum(m['deplasman_gol'] for m in matches) / len(matches)
+    }
+
+    # 2. Simülasyonu çalıştır
+    final_table, error = run_season_simulation(strengths, league_averages)
+    if error:
+        print(f"\nHATA: {error}");
+        return
+
+    # 3. Simülasyon sonucunu (nihai puan durumu) ekrana yazdır
+    print(f"\n--- SİMÜLASYON SONUCU: {season_input} GÜÇLERİNE GÖRE OLUŞAN PUAN DURUMU ---")
+    print("-" * 85)
+    print(f"{'#':<3} {'Takım':<25} {'OM':>4} {'G':>4} {'B':>4} {'M':>4} {'AG':>4} {'YG':>4} {'Av.':>5} {'P':>5}")
+    print("-" * 85)
+    for i, (team_name, stats) in enumerate(final_table, 1):
+        print(
+            f"{i:<3} {team_name:<25} {stats['OM']:>4} {stats['G']:>4} {stats['B']:>4} {stats['M']:>4} {stats['AG']:>4} {stats['YG']:>4} {stats['Av.']:>5} {stats['P']:>5}")
+    print("-" * 85)
+    print(f"\nŞampiyon: {final_table[0][0]}")
+
+
 def main_menu():
     """Programın ana menüsünü gösterir ve kullanıcı seçimlerini yönetir."""
     while True:
         print("\n===== ANA MENÜ =====")
         print("1. Puan Tablosu İncele")
         print("2. Takım Gücü Analizi")
-        print("3. Tek Maç Simülasyonu")  # Yeni seçenek
+        print("3. Tek Maç Simülasyonu")
+        print("4. Tam Sezon Simülasyonu")  # YENİ
         print("q. Çıkış")
 
         choice = input("Lütfen yapmak istediğiniz işlemi seçin: ")
@@ -138,7 +154,9 @@ def main_menu():
         elif choice == '2':
             show_team_strength_menu()
         elif choice == '3':
-            show_single_match_simulation_menu()  # Yeni fonksiyonu çağır
+            show_single_match_simulation_menu()
+        elif choice == '4':
+            show_full_season_simulation_menu()  # YENİ
         elif choice.lower() == 'q':
             print("Programdan çıkılıyor. Hoşça kalın!")
             break
