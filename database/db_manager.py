@@ -57,6 +57,30 @@ def create_database_structure():
     )
     ''')
 
+    def get_matches_by_season(season_range):
+        """
+        Belirtilen sezondaki tüm maçları ve TEMEL İSTATİSTİKLERİNİ veritabanından çeker.
+        """
+        connection = sqlite3.connect(DATABASE_NAME)
+        connection.row_factory = sqlite3.Row
+        cursor = connection.cursor()
+
+        # Sorguya istatistik sütunlarını ekliyoruz
+        query = """
+        SELECT 
+            ev_sahibi_takim, deplasman_takim, ev_sahibi_gol, deplasman_gol,
+            ev_sahibi_sut, deplasman_sut, ev_sahibi_isabetli_sut, deplasman_isabetli_sut
+        FROM Maclar
+        WHERE sezon_araligi = ?
+        """
+
+        cursor.execute(query, (season_range,))
+        matches = [dict(row) for row in cursor.fetchall()]
+        connection.close()
+
+        print(f"\n{season_range} sezonu için veritabanından {len(matches)} maç ve istatistikleri çekildi.")
+        return matches
+
     print(f"'{DATABASE_NAME}' için nihai veritabanı yapısı başarıyla oluşturuldu.")
 
     connection.commit()
