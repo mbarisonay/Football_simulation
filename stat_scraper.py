@@ -1,4 +1,4 @@
-# scrape_sofifa.py (FIFA 15'ten FC 25'e Premier Lig Oyuncu Reytinglerini Çeken Kod)
+# scrape_sofifa_detailed.py (Bir Takımın Detaylı Oyuncu Statlarını Çeken Kod)
 
 import pandas as pd
 from selenium import webdriver
@@ -9,110 +9,97 @@ from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 import time
 import random
+import re
 
 # --- AYARLAR ---
-BASE_URL = "https://sofifa.com/players"
-OUTPUT_FILE = "sofifa_player_ratings_fifa15_fc25.csv"
+BASE_URL = "https://sofifa.com"
+OUTPUT_FILE = "fifa15_chelsea_detailed_stats.csv"
 all_players_data = []
 
-# SoFIFA'daki sürüm kodlarını ve oyun isimlerini eşleştirelim
-# FIFA 15 -> v=15, EA FC 25 -> v=25
-FIFA_VERSIONS = {
-    15: "FIFA 15", 16: "FIFA 16", 17: "FIFA 17", 18: "FIFA 18", 19: "FIFA 19",
-    20: "FIFA 20", 21: "FIFA 21", 22: "FIFA 22", 23: "FIFA 23", 24: "FIFA 24",
-    25: "EA FC 25"
-}
-
-# Premier League'in SoFIFA'daki lig ID'si 13'tür.
-PREMIER_LEAGUE_ID = 13
+# --- HEDEF ---
+# FIFA 15 (v=15), Chelsea (ID=5)
+TARGET_URL = "https://sofifa.com/team/5/chelsea/?v=15"
 
 # --- Selenium Başlat ---
 options = webdriver.ChromeOptions()
 options.add_argument(
     "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
-# options.add_argument("--headless=new") # Test ederken kapalı tutun
+# options.add_argument("--headless=new")
 
 driver = None
 try:
-    # Selenium 4'ün kendi sürücü yöneticisini kullanıyoruz, en stabil yöntem.
     driver = webdriver.Chrome(service=Service(), options=options)
-    wait = WebDriverWait(driver, 10)
+    wait = WebDriverWait(driver, 15)
 
-    # Adım 1: Her bir FIFA sürümü için ana döngüyü başlat
-    for version_code, version_name in FIFA_VERSIONS.items():
-        # Sezonu hesapla (örn: FIFA 15 = 2014-2015 sezonu)
-        season_start = 2000 + version_code - 1
-        season_end = season_start + 1
-        season_str = f"{season_start}-{season_end}"
+    print(f"Hedef URL'ye gidiliyor: {TARGET_URL}")
+    driver.get(TARGET_URL)
 
-        print(f"\n{'=' * 60}\n--- Veri Çekiliyor: {version_name} ({season_str} Sezonu) ---\n{'=' * 60}")
+    # Oyuncu tablosunun yüklenmesini bekle
+    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "table.table-players")))
 
-        offset = 0  # Sayfalama için başlangıç noktası
+    # Sayfadaki tüm oyuncuların linklerini ve temel bilgilerini topla
+    soup = BeautifulSoup(driver.page_source, "html.parser")
+    player_rows = soup.select("table.table-players tbody tr")
 
-        # Adım 2: Bir sürümdeki tüm sayfaları gezmek için döngü
-        while True:
-            # URL'yi oluştur: Sürüm kodu, lig ID'si ve sayfa offset'i ile
-            url = f"{BASE_URL}?v={version_code}&league={PREMIER_LEAGUE_ID}&offset={offset}"
+    player_info_list = []
+    for row in player_rows:
+        link_tag = row.select_one("td.col-name a")
+        if link_tag:
+            player_info_list.append({
+                'url': BASE_URL + link_tag['href'],
+                'name': link_tag.select_one("div").get_text(strip=True),
+                'overall': int(row.select_one("td.col-oa span").get_text(strip=True)),
+                'potential': int(row.select_one("td.col-pt span").get_text(strip=True))
+            })
 
-            print(f"  -> Sayfa işleniyor: {url}")
-            driver.get(url)
+    print(f"-> {len(player_info_list)} oyuncu bulundu. Detaylı statlar çekiliyor...")
 
-            # Oyuncu tablosunun yüklenmesini bekle
-            try:
-                wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "table.table-players")))
-            except:
-                print("  -> Sayfa zaman aşımına uğradı veya tablo bulunamadı. Bu sürüm atlanıyor.")
-                break  # Bir sonraki FIFA sürümüne geç
+    # Adım 2: Her oyuncunun kendi sayfasına git
+    for i, player_info in enumerate(player_info_list, 1):
+        print(f"  -> İşleniyor: {i}/{len(player_info_list)} - {player_info['name']}")
+        driver.get(player_info['url'])
 
-            soup = BeautifulSoup(driver.page_source, "html.parser")
-            player_rows = soup.select("table.table-players tbody tr")
+        try:
+            # Oyuncu detaylarının (grid) yüklenmesini bekle
+            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.grid")))
+            player_soup = BeautifulSoup(driver.page_source, "html.parser")
 
-            # Eğer sayfada hiç oyuncu yoksa, o FIFA sürümü için işlem bitmiştir.
-            if not player_rows:
-                print(" -> Bu sürüm için daha fazla oyuncu bulunamadı.")
-                break  # While döngüsünü kır ve bir sonraki FIFA sürümüne geç
+            # Oyuncunun temel bilgilerini (Overall, Potential) doğrudan profil sayfasından alalım
+            # Bu, en doğru bilgiyi garanti eder
+            grid_cols = player_soup.select("div.grid > div.col")
+            overall = int(grid_cols[0].find("em").get_text(strip=True))
+            potential = int(grid_cols[1].find("em").get_text(strip=True))
 
-            # Adım 3: Sayfadaki her bir oyuncu satırını işle
-            for row in player_rows:
-                try:
-                    player_name = row.select_one("td.col-name a div").get_text(strip=True)
-                    player_age = int(row.select_one("td.col-ae").get_text(strip=True))
-                    overall_rating = int(row.select_one("td.col-oa span").get_text(strip=True))
-                    potential_rating = int(row.select_one("td.col-pt span").get_text(strip=True))
+            # Statları toplamak için bir sözlük oluştur
+            player_stats = {
+                "GameVersion": "FIFA 15",
+                "Season": "2014-2015",
+                "PlayerName": player_info['name'],
+                "Club": "Chelsea",  # Sabit olarak biliyoruz
+                "Overall": overall,
+                "Potential": potential
+            }
 
-                    # Kulüp ismi, ismin altındaki küçük linkte yer alır
-                    club_element = row.select_one("td.col-name .subtitle a")
-                    club_name = club_element.get_text(strip=True) if club_element else "Unknown"
+            # Tüm "grid attribute" bloklarını bul
+            attribute_blocks = player_soup.select("div.grid.attribute")
+            for block in attribute_blocks:
+                # Blok başlığını al (örn: "Attacking", "Goalkeeping")
+                block_title = block.find("h5").get_text(strip=True)
 
-                    # Çekilen veriyi listeye ekle
-                    all_players_data.append({
-                        "GameVersion": version_name,
-                        "Season": season_str,
-                        "PlayerName": player_name,
-                        "Club": club_name,
-                        "Age": player_age,
-                        "Overall": overall_rating,
-                        "Potential": potential_rating
-                    })
-                except Exception as e:
-                    # Bir satırda hata olursa atla ve devam et
-                    print(f"    - Bir oyuncu satırı işlenirken hata oluştu: {e}")
-                    continue
+                # Blok içindeki her bir stat'ı (`col` div'i) işle
+                for stat_col in block.select("div.col"):
+                    try:
+                        value = int(stat_col.find("em").get_text(strip=True))
+                        # Stat ismini alırken, "GK Diving" gibi isimleri birleştirelim
+                        stat_name_raw = stat_col.get_text(strip=True)
+                        stat_name = re.sub(r'^\d+', '', stat_name_raw).strip()  # Başındaki sayıyı kaldır
 
-            print(f"  -> Bu sayfadan {len(player_rows)} oyuncu çekildi. Toplam: {len(all_players_data)}")
+                        # Eğer kaleci statı ise başına "GK" ekleyelim ki karışmasın
+                        if block_title == "Goalkeeping":
+                            stat_name = f"GK {stat_name}"
 
-            # Sonraki sayfaya geçmek için offset'i artır (SoFIFA sayfa başına 60 oyuncu gösterir)
-            offset += 60
-            time.sleep(random.uniform(1, 2.5))  # Siteye yük bindirmemek için bekle
+                        player_stats[stat_name] = value
+                    except:
+                        continue  # Hatalı stat satırını atla
 
-finally:
-    if driver:
-        driver.quit()
-
-# Adım 4: Tüm verileri bir DataFrame'e dönüştür ve CSV dosyasına kaydet
-if all_players_data:
-    df = pd.DataFrame(all_players_data)
-    df.to_csv(OUTPUT_FILE, index=False, encoding='utf-8-sig')
-    print(f"\n✅ İşlem tamamlandı! {len(df)} oyuncu kaydı '{OUTPUT_FILE}' dosyasına başarıyla kaydedildi.")
-else:
-    print("\n❌ Hiçbir veri çekilemedi. Bir sorun oluştu.")
+            all_players_data.append(player_stats)
