@@ -103,3 +103,22 @@ try:
                         continue  # Hatalı stat satırını atla
 
             all_players_data.append(player_stats)
+            time.sleep(random.uniform(0.5, 1.5))
+
+        except Exception as e:
+            print(f"    - HATA: {player_info['name']} işlenirken sorun oluştu: {e}")
+            continue
+
+finally:
+    if driver:
+        driver.quit()
+
+# Adım 3: Tüm verileri bir DataFrame'e dönüştür ve CSV dosyasına kaydet
+if all_players_data:
+    df = pd.DataFrame(all_players_data)
+    # NaN (boş) değerleri 0 ile dolduralım. Örneğin, bir forvetin GK statları boş kalacaktır.
+    df.fillna(0, inplace=True)
+    df.to_csv(OUTPUT_FILE, index=False, encoding='utf-8-sig')
+    print(f"\n✅ İşlem tamamlandı! {len(df)} oyuncu kaydı '{OUTPUT_FILE}' dosyasına başarıyla kaydedildi.")
+else:
+    print("\n❌ Hiçbir veri çekilemedi. Bir sorun oluştu.")
