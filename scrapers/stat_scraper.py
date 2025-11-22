@@ -9,10 +9,18 @@ import re
 import sys
 
 # --- URL AYARLARI ---
-# Tüm özellikleri (Agility, Balance, vb.) getiren uzun URL
-BASE_URL_TEMPLATE = "https://sofifa.com/players?type=all&lg%5B0%5D=13&showCol%5B0%5D=ae&showCol%5B1%5D=oa&showCol%5B2%5D=pt&showCol%5B3%5D=vl&showCol%5B4%5D=wg&showCol%5B5%5D=ta&showCol%5B6%5D=cr&showCol%5B7%5D=fi&showCol%5B8%5D=he&showCol%5B9%5D=sh&showCol%5B10%5D=vo&showCol%5B11%5D=ts&showCol%5B12%5D=dr&showCol%5B13%5D=cu&showCol%5B14%5D=fr&showCol%5B15%5D=lo&showCol%5B16%5D=bl&showCol%5B17%5D=to&showCol%5B18%5D=ac&showCol%5B19%5D=sp&showCol%5B20%5D=ag&showCol%5B21%5D=re&showCol%5B22%5D=ba&showCol%5B23%5D=tp&showCol%5B24%5D=so&showCol%5B25%5D=ju&showCol%5B26%5D=st&showCol%5B27%5D=sr&showCol%5B28%5D=ln&showCol%5B29%5D=te&showCol%5B30%5D=ar&showCol%5B31%5D=in&showCol%5B32%5D=po&showCol%5B33%5D=vi&showCol%5B34%5D=pe&showCol%5B35%5D=cm&showCol%5B36%5D=td&showCol%5B37%5D=ma&showCol%5B38%5D=sa&showCol%5B39%5D=sl&showCol%5B40%5D=tg&showCol%5B41%5D=gd&showCol%5B42%5D=gh&showCol%5B43%5D=gc&showCol%5B44%5D=gp&showCol%5B45%5D=gr"
+# lg parametresini dinamik yapacağız, şablondan çıkardık.
+BASE_URL_TEMPLATE = "https://sofifa.com/players?type=all&showCol%5B0%5D=ae&showCol%5B1%5D=oa&showCol%5B2%5D=pt&showCol%5B3%5D=vl&showCol%5B4%5D=wg&showCol%5B5%5D=ta&showCol%5B6%5D=cr&showCol%5B7%5D=fi&showCol%5B8%5D=he&showCol%5B9%5D=sh&showCol%5B10%5D=vo&showCol%5B11%5D=ts&showCol%5B12%5D=dr&showCol%5B13%5D=cu&showCol%5B14%5D=fr&showCol%5B15%5D=lo&showCol%5B16%5D=bl&showCol%5B17%5D=to&showCol%5B18%5D=ac&showCol%5B19%5D=sp&showCol%5B20%5D=ag&showCol%5B21%5D=re&showCol%5B22%5D=ba&showCol%5B23%5D=tp&showCol%5B24%5D=so&showCol%5B25%5D=ju&showCol%5B26%5D=st&showCol%5B27%5D=sr&showCol%5B28%5D=ln&showCol%5B29%5D=te&showCol%5B30%5D=ar&showCol%5B31%5D=in&showCol%5B32%5D=po&showCol%5B33%5D=vi&showCol%5B34%5D=pe&showCol%5B35%5D=cm&showCol%5B36%5D=td&showCol%5B37%5D=ma&showCol%5B38%5D=sa&showCol%5B39%5D=sl&showCol%5B40%5D=tg&showCol%5B41%5D=gd&showCol%5B42%5D=gh&showCol%5B43%5D=gc&showCol%5B44%5D=gp&showCol%5B45%5D=gr"
 
-# HTML 'data-col' kodları -> CSV Başlıkları
+# --- LİG ID'LERİ (SoFIFA) ---
+LEAGUES = {
+    "Premier League": "13",
+    "La Liga": "53",
+    "Bundesliga": "19",
+    "Serie A": "31",
+    "Ligue 1": "16"  # Fransa'yı da ekledim, tam paket olsun.
+}
+
 STATS_MAP_TABLE = {
     'ae': 'Age', 'oa': 'Overall', 'pt': 'Potential',
     'cr': 'Crossing', 'fi': 'Finishing', 'he': 'HeadingAccuracy', 'sh': 'ShortPassing',
@@ -41,63 +49,44 @@ FIFA_ROSTERS = {
 
 def clean_stat(value):
     if not value: return "0"
-    # Sayısal değeri al (85+2 -> 85)
     match = re.search(r'^\d+', str(value).strip())
     return match.group(0) if match else str(value).strip()
 
 
-# --- PARSER (VERİ AYIKLAYICI) ---
-def parse_via_table(soup, version_name, season_str):
+def parse_via_table(soup, version_name, season_str, league_name):
     players_data = []
-    # Tabloyu bul
     table = soup.find('table')
     if not table: return []
-
     tbody = table.find('tbody')
     if not tbody: return []
 
-    # Satırları gez
     for row in tbody.find_all('tr'):
         try:
-            # -- İSİM BULMA (GÜÇLENDİRİLMİŞ YÖNTEM) --
-            # Class ismine bakmaksızın, satırdaki ilk oyuncu linkini alıyoruz.
             name_link = row.select_one("a[href*='/player/']")
+            if not name_link: continue
+            player_name = name_link.get_text(strip=True)
 
-            if not name_link:
-                # Eğer link yoksa, bu bir başlık satırı olabilir, geçiyoruz.
-                continue
-
-            player_name = name_link.get_text(strip=True)  # Linkin içindeki yazıyı (E. Hazard) al
-
-            # -- TAKIM BULMA --
             team_link = row.select_one("a[href*='/team/']")
             team_name = team_link.get_text(strip=True) if team_link else "Unknown"
 
             p_data = {
                 "Season": season_str,
                 "FifaVersion": version_name,
+                "League": league_name,  # YENİ: Hangi ligden geldiğini kaydediyoruz
                 "Name": player_name,
                 "Team": team_name
             }
 
-            # -- İSTATİSTİKLERİ ÇEKME --
-            # data-col="oa" gibi öznitelikleri arıyoruz
             for code, header in STATS_MAP_TABLE.items():
                 col = row.find('td', {'data-col': code})
                 if col:
-                    # Bazen değer <span> içinde olur, bazen direkt text
                     val = col.get_text(strip=True)
                     p_data[header] = clean_stat(val)
                 else:
                     p_data[header] = "0"
-
             players_data.append(p_data)
-
-        except Exception as e:
-            # Tek bir satırda hata olursa tüm programı durdurma, o satırı atla
-            # print(f"Satır hatası: {e}")
+        except:
             continue
-
     return players_data
 
 
@@ -107,6 +96,7 @@ tum_veriler_toplam = []
 
 try:
     options = uc.ChromeOptions()
+    # options.add_argument('--headless') # İstersen açabilirsin ama görsel takip daha iyi
     profile_path = os.path.join(os.getcwd(), "sofifa_profile")
     options.add_argument(f"--user-data-dir={profile_path}")
     options.add_argument("--lang=en-US")
@@ -119,66 +109,62 @@ try:
 
     print("SoFIFA'ya gidiliyor...")
     driver.get("https://sofifa.com")
-    print("\n--- DOĞRULAMA ---")
-    print("Lütfen tarayıcıdaki kontrolleri geçin (Accept All / Captcha).")
-    input("Hazırsanız ENTER'a basın...")
+    print("\n--- LÜTFEN GİRİŞ EKRANINI GEÇİN (Captcha/Cookies) ---")
+    input("Hazır olduğunda ENTER'a bas...")
 
-    for version_name, (season_str, roster_id) in FIFA_ROSTERS.items():
-        print(f"\n{'=' * 60}\n--- {version_name} ({season_str}) İşleniyor ---\n{'=' * 60}")
-        all_season_players = []
-        offset = 0
+    # --- DIŞ DÖNGÜ: LİGLER ---
+    for league_name, league_id in LEAGUES.items():
+        print(f"\n{'#' * 50}")
+        print(f"🌍 LİG BAŞLATILIYOR: {league_name} (ID: {league_id})")
+        print(f"{'#' * 50}")
 
-        while True:
-            # URL oluştur
-            target_url = f"{BASE_URL_TEMPLATE}&r={roster_id}&set=true&offset={offset}"
+        # --- İÇ DÖNGÜ: SEZONLAR ---
+        for version_name, (season_str, roster_id) in FIFA_ROSTERS.items():
+            print(f"\n--- {league_name} | {version_name} ({season_str}) ---")
+            all_season_players = []
+            offset = 0
 
-            try:
-                driver.get(target_url)
-                time.sleep(random.uniform(3, 5))  # Bekleme süresi
-            except:
-                print("Sayfa yüklenemedi, tekrar deneniyor...")
-                time.sleep(5)
-                continue
+            while True:
+                # URL'ye Lig ID'sini ekliyoruz
+                target_url = f"{BASE_URL_TEMPLATE}&lg%5B0%5D={league_id}&r={roster_id}&set=true&offset={offset}"
 
-            soup = BeautifulSoup(driver.page_source, 'html.parser')
+                try:
+                    driver.get(target_url)
+                    time.sleep(random.uniform(3, 5))
+                except:
+                    time.sleep(5)
+                    continue
 
-            # Veriyi çek
-            page_players = parse_via_table(soup, version_name, season_str)
+                soup = BeautifulSoup(driver.page_source, 'html.parser')
+                page_players = parse_via_table(soup, version_name, season_str, league_name)
 
-            if not page_players:
-                print(f"  -> Offset {offset}: Oyuncu bulunamadı. Sezon bitmiş olabilir.")
-                break
+                if not page_players:
+                    print(f"  -> Bitti veya Bulunamadı. Offset: {offset}")
+                    break
 
-            print(f"  -> Offset {offset}: {len(page_players)} oyuncu başarıyla çekildi.")
-            all_season_players.extend(page_players)
+                print(f"  -> {len(page_players)} oyuncu çekildi (Offset: {offset})")
+                all_season_players.extend(page_players)
 
-            # Pagination (Sayfalama) Kontrolü
-            # Eğer çekilen oyuncu sayısı 60'tan azsa son sayfadayız demektir.
-            if len(page_players) < 60:
-                print("  -> Sezon sonuna gelindi.")
-                break
+                if len(page_players) < 60:
+                    break
 
-            offset += 60
+                offset += 60
 
-        # Kaydet
-        if all_season_players:
-            season_df = pd.DataFrame(all_season_players)
-            filename = f"stats_{season_str.replace('-', '_')}.csv"
-            season_df.to_csv(filename, index=False, encoding="utf-8-sig")
-            print(f"✅ {version_name} tamamlandı! '{filename}' dosyasına kaydedildi.")
-            tum_veriler_toplam.extend(all_season_players)
-        else:
-            print(f"⚠️ {version_name} için hiç veri çekilemedi.")
+            # Her sezon sonunda o ligin o sezonunu kaydedelim (Veri kaybı olmasın)
+            if all_season_players:
+                tum_veriler_toplam.extend(all_season_players)
+                # Anlık yedekleme (Opsiyonel)
+                # pd.DataFrame(all_season_players).to_csv(f"backup_{league_name}_{season_str}.csv", index=False)
 
 except Exception as e:
-    print(f"Beklenmeyen bir hata oluştu: {e}")
+    print(f"Hata: {e}")
 
 finally:
     if tum_veriler_toplam:
         total_df = pd.DataFrame(tum_veriler_toplam)
-        total_df.to_csv("ALL_FIFA_STATS_FINAL.csv", index=False, encoding="utf-8-sig")
-        print("\n🎉 MÜKEMMEL! Tüm sezonlar 'ALL_FIFA_STATS_FINAL.csv' içinde birleştirildi.")
+        # Dosya ismini değiştirdim, tüm ligler var
+        total_df.to_csv("ALL_LEAGUES_FIFA_STATS.csv", index=False, encoding="utf-8-sig")
+        print("\n🎉 MÜKEMMEL! Tüm ligler 'ALL_LEAGUES_FIFA_STATS.csv' içine kaydedildi.")
 
     if driver:
-        print("Tarayıcı kapatılıyor...")
         driver.quit()
