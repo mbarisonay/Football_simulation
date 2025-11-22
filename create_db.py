@@ -2,32 +2,26 @@ import sqlite3
 import pandas as pd
 import os
 
-# --- DOSYA İSİMLERİ (SENDEKİLERLE DEĞİŞTİR) ---
-# 1. SoFIFA'dan gelen dosya (Statlar)
+# --- DOSYA İSİMLERİ ---
 FILE_PLAYER_STATS = "ALL_FIFA_STATS_FINAL.csv"
-# 2. FBref'ten gelen dosya (Maçlar)
 FILE_MATCHES = "fbref_premier_league_stats_2014-2025_COMPLETE.csv"
-# 3. Transfermarkt'tan gelen dosya (Uyruklar - Opsiyonel)
 FILE_SQUADS = "premier_league_squads_2000_2025.csv"
 
 DB_NAME = "football_sim.db"
 
 
 def create_connection():
-    conn = sqlite3.connect(DB_NAME)
-    return conn
+    return sqlite3.connect(DB_NAME)
 
 
 def clean_team_names(team_name):
     """
-    Takım isimlerini standartlaştırır.
-    Örn: 'Manchester United FC' -> 'Manchester United'
-    Bu, tabloları birbiriyle eşleştirmek için KRİTİKTİR.
+    İki farklı kaynaktan gelen takım isimlerini standartlaştırır.
+    Böylece tablolar arasında bağlantı kurulabilir.
     """
     if not isinstance(team_name, str): return "Unknown"
     name = team_name.strip()
 
-    # Basit eşleştirmeler (Gerektikçe listeyi uzatabilirsin)
     replacements = {
         "Manchester Utd": "Manchester United",
         "Man United": "Manchester United",
@@ -36,91 +30,126 @@ def clean_team_names(team_name):
         "Tottenham": "Tottenham Hotspur",
         "Newcastle": "Newcastle United",
         "Leicester": "Leicester City",
-        "West Ham": "West Ham United"
+        "West Ham": "West Ham United",
+        "QPR": "Queens Park Rangers",
+        "Wolves": "Wolverhampton Wanderers"
     }
-
     return replacements.get(name, name)
 
 
 def import_player_stats(conn):
     if not os.path.exists(FILE_PLAYER_STATS):
-        print(f"⚠️ {FILE_PLAYER_STATS} bulunamadı, atlanıyor.")
+        print(f"⚠️ {FILE_PLAYER_STATS} bulunamadı.")
         return
 
-    print("--- Oyuncu Statları Yükleniyor ---")
+    print("--- 1. Oyuncu Statları (SoFIFA) Yükleniyor ---")
     df = pd.read_csv(FILE_PLAYER_STATS)
 
-    # Sütun isimlerini temizle (Boşlukları at, vs.)
-    df.columns = [c.strip().replace(' ', '_') for c in df.columns]
+    # --- İSTEĞİN: FifaVersion Sütununu Kaldır ---
+    if 'FifaVersion' in df.columns:
+        df.drop(columns=['FifaVersion'], inplace=True)
+        print("  -> 'FifaVersion' sütunu kaldırıldı.")
+
+    # Takım isimlerini standartlaştır (Bağlantı için şart)
+    if 'Team' in df.columns:
+        df['Team'] = df['Team'].apply(clean_team_names)
+
+    # Tabloyu oluştur
+    df.to_sql('player_stats', conn, if_exists='replace', index=False)
+
+    # İndeksler (Performans ve Bağlantı için)
+    cursor = conn.cursor()
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_p_key ON player_stats (Name, Team, Season)")
+    conn.commit()
+    print(f"✅ {len(df)} satır 'player_stats' tablosuna eklendi.")
+
+
+def import_squad_details(conn):
+    if not os.path.exists(FILE_SQUADS):
+        print(f"⚠️ {FILE_SQUADS} bulunamadı.")
+        return
+
+    print("--- 2. Kadro Detayları (Transfermarkt) Yükleniyor ---")
+    df = pd.read_csv(FILE_SQUADS)
 
     # Takım isimlerini standartlaştır
     if 'Team' in df.columns:
         df['Team'] = df['Team'].apply(clean_team_names)
 
-    # Veri Tiplerini Düzelt (Statların sayı olduğundan emin ol)
-    # 85+2 gibi değerleri temizlemiştik ama garanti olsun
-    stat_columns = ['Overall', 'Potential', 'Pace', 'Shooting', 'Finishing', 'SprintSpeed', 'Dribbling']  # Örnekler
-    # (Senin CSV'de çok sütun var, Pandas to_sql çoğunu otomatik anlar ama kritik olanları zorlayabiliriz)
+    # Tabloyu oluştur
+    df.to_sql('squad_details', conn, if_exists='replace', index=False)
 
-    # SQL'e Yaz
-    df.to_sql('player_stats', conn, if_exists='replace', index=False)
-    print(f"✅ {len(df)} oyuncu stat verisi 'player_stats' tablosuna eklendi.")
-
-    # İndeksler (Hız için çok önemli)
+    # İndeksler
     cursor = conn.cursor()
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_ps_season ON player_stats (Season)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_ps_team ON player_stats (Team)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_ps_name ON player_stats (Name)")
+    # Transfermarkt dosyasında oyuncu ismi sütunu 'Player' ise ona göre indeks atıyoruz
+    player_col = 'Player' if 'Player' in df.columns else 'Name'
+    cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_s_key ON squad_details ({player_col}, Team, Season)")
     conn.commit()
+    print(f"✅ {len(df)} satır 'squad_details' tablosuna eklendi.")
 
 
 def import_matches(conn):
     if not os.path.exists(FILE_MATCHES):
-        print(f"⚠️ {FILE_MATCHES} bulunamadı, atlanıyor.")
+        print(f"⚠️ {FILE_MATCHES} bulunamadı.")
         return
 
-    print("--- Maç Verileri Yükleniyor ---")
+    print("--- 3. Maç Geçmişi Yükleniyor ---")
     df = pd.read_csv(FILE_MATCHES)
 
-    # Takım isimlerini standartlaştır (Eşleşme için)
+    # Takım isimlerini standartlaştır
     if 'HomeTeam' in df.columns: df['HomeTeam'] = df['HomeTeam'].apply(clean_team_names)
     if 'AwayTeam' in df.columns: df['AwayTeam'] = df['AwayTeam'].apply(clean_team_names)
 
     df.to_sql('matches', conn, if_exists='replace', index=False)
-    print(f"✅ {len(df)} maç verisi 'matches' tablosuna eklendi.")
 
     cursor = conn.cursor()
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_match_season ON matches (Season)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_match_teams ON matches (HomeTeam, AwayTeam)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_m_season ON matches (Season)")
     conn.commit()
+    print(f"✅ {len(df)} maç eklendi.")
 
 
-def import_squad_details(conn):
-    if not os.path.exists(FILE_SQUADS):
-        print(f"⚠️ {FILE_SQUADS} bulunamadı, atlanıyor.")
-        return
+def create_unified_view(conn):
+    """
+    İŞTE BAĞLANTI BURADA KURULUYOR!
+    İki tabloyu (stats ve details) birleştiren sanal bir tablo (VIEW) oluşturuyoruz.
+    """
+    print("--- 4. Tablolar Arası Bağlantı (View) Oluşturuluyor ---")
+    cursor = conn.cursor()
 
-    print("--- Kadro Detayları (Uyruk vb.) Yükleniyor ---")
-    df = pd.read_csv(FILE_SQUADS)
+    # Eski view varsa sil
+    cursor.execute("DROP VIEW IF EXISTS v_full_player_data")
 
-    if 'Team' in df.columns: df['Team'] = df['Team'].apply(clean_team_names)
+    # SQL Sorgusu: İki tabloyu Takım ve Sezon üzerinden, İsimleri de benzeterek birleştirir.
+    # Not: SoFIFA'da 'E. Hazard', Transfermarkt'ta 'Eden Hazard' olduğu için
+    # tam eşleşme zor olabilir. Burada 'Team' ve 'Season' ana bağlayıcıdır.
+    query = """
+    CREATE VIEW v_full_player_data AS
+    SELECT 
+        p.*, 
+        s.Nationality, 
+        s.Position as DetailedPosition
+    FROM player_stats p
+    LEFT JOIN squad_details s 
+      ON p.Team = s.Team 
+      AND p.Season = s.Season
+      AND (s.Player LIKE '%' || p.Name || '%' OR p.Name LIKE '%' || s.Player || '%')
+    """
+    # Not: LIKE eşleşmesi yavaştır ama isim farklarını (E. Hazard vs Eden Hazard) yakalamaya çalışır.
 
-    # Bu tabloyu sadece destekleyici bilgi olarak kullanacağız
-    df.to_sql('squad_details', conn, if_exists='replace', index=False)
-    print(f"✅ {len(df)} kadro detayı 'squad_details' tablosuna eklendi.")
+    cursor.execute(query)
+    conn.commit()
+    print("✅ 'v_full_player_data' adında birleşik sanal tablo oluşturuldu.")
 
 
 # --- ÇALIŞTIR ---
 if __name__ == "__main__":
-    try:
-        connection = create_connection()
+    conn = create_connection()
 
-        import_player_stats(connection)
-        import_matches(connection)
-        import_squad_details(connection)
+    import_player_stats(conn)
+    import_squad_details(conn)
+    import_matches(conn)
 
-        connection.close()
-        print("\n🎉 Veritabanı kurulumu başarıyla tamamlandı: football_sim.db")
+    create_unified_view(conn)
 
-    except Exception as e:
-        print(f"\n❌ Bir hata oluştu: {e}")
+    conn.close()
+    print("\n🎉 Veritabanı hazır! 'FifaVersion' silindi ve tablolar bağlandı.")
