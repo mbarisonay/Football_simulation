@@ -1,118 +1,138 @@
-# data-ingestion/scraper.py (İnsansı Davranış Modu)
+# import_transfermarkt.py (Geliştirilmiş Teşhis Versiyonu)
 
+import pandas as pd
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service as ChromeService
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 import time
+import sys
+import os
 
+# Proje kök dizinini sisteme tanıt
+project_root = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, project_root)
 
-def scrape_mackolik_season():
-    options = webdriver.ChromeOptions()
-    # options.add_argument('--headless=new') # GÖZLEMLEMEK İÇİN BU SATIRI KAPALI TUTUYORUZ
-    options.add_argument(
-        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36")
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option('useAutomationExtension', False)
+# --------------------------------------
+# Ayarlar
+# --------------------------------------
+BASE_URL = "https://www.transfermarkt.com"
+SEASONS = list(range(2000, 2025))  # Test için sadece 1 sezon çalıştıralım
+OUTPUT_FILE = "premier_league_squads_2000_2025.csv"
+all_data = []
 
-    driver = webdriver.Chrome(options=options)
+# --- TAKIM EŞLEŞTİRME SÖZLÜĞÜ (EN ÖNEMLİ KISIM) ---
+# Transfermarkt'taki ismi, bizim veritabanımızdaki isme çevirir
+TAKIM_ESLESTIRME = {
+    "Manchester City": "Man City",
+    "Manchester United": "Man United",
+    "Newcastle United": "Newcastle",
+    "Tottenham Hotspur": "Tottenham",
+    "Nottingham Forest": "Nott'm Forest",
+    "Wolverhampton Wanderers": "Wolves",
+    "West Ham United": "West Ham",
+    "AFC Bournemouth": "Bournemouth",
+    "Sheffield United": "Sheffield Utd"  # Örnek: Belki 'Sheffield United' yerine 'Sheffield Utd' yazıyordur
+    # Eşleşmeyen diğer takımları buraya ekleyeceğiz
+}
 
-    print("Maçkolik'ten veri çekiliyor (İnsansı Mod)...")
+# --------------------------------------
+# Selenium Başlat
+# --------------------------------------
+options = webdriver.ChromeOptions()
+# options.add_argument("--headless=new") # Test ederken kapalı kalsın
+options.add_argument(
+    "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36")
+options.add_experimental_option("excludeSwitches", ["enable-automation"])
+options.add_experimental_option('useAutomationExtension', False)
 
-    try:
-        # 1. Adım: Ana sayfaya git
-        driver.get("https://www.mackolik.com")
-        print("Ana sayfaya gidildi.")
+driver = None
+try:
+    driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options)
+    wait = WebDriverWait(driver, 10)
 
-        # 2. Adım: Çerezleri kabul et
+    for season in SEASONS:
+        print(f"\n--- {season}-{season + 1} sezonu işleniyor ---")
+
+        league_url = f"{BASE_URL}/premier-league/startseite/wettbewerb/GB1/plus/?saison_id={season}"
+        driver.get(league_url)
+
+        # Çerezleri kabul et
         try:
-            wait = WebDriverWait(driver, 10)
-            # Maçkolik'in çerez butonu ID'si 'accept-all-cookies-button'
-            accept_button = wait.until(EC.element_to_be_clickable((By.ID, "accept-all-cookies-button")))
+            wait.until(EC.frame_to_be_available_and_switch_to_it((By.ID, "sp_message_iframe_1056579")))
+            accept_button = wait.until(EC.element_to_be_clickable((By.XPATH, '//button[@title="ACCEPT ALL"]')))
             accept_button.click()
-            print("[BİLGİ] Çerez butonu bulundu ve tıklandı.")
+            print("  [✓] Çerezler kabul edildi.")
+            driver.switch_to.default_content()
         except Exception:
-            print("[BİLGİ] Çerez butonu bulunamadı, zaman aşımına uğradı veya gerekli değil.")
+            print("  [!] Çerez penceresi bulunamadı, devam ediliyor.")
+            driver.switch_to.default_content()
 
-        time.sleep(2)  # Sayfanın oturması için kısa bir bekleme
+        time.sleep(2)
 
-        # 3. Adım: Hedef URL'ye doğrudan git (Tıklama yerine daha güvenilir)
-        season_url = "https://www.mackolik.com/futbol/türkiye/süper-lig/2022-2023/fikstür/1r097lpxe0xn03ihb7wi98kao"
-        driver.get(season_url)
-        print("Fikstür sayfasına gidildi.")
+        soup = BeautifulSoup(driver.page_source, "html.parser")
+        team_links = soup.select("table.items tbody tr.odd, table.items tbody tr.even")
 
-        # Maç kartlarının yüklenmesini bekle
-        wait = WebDriverWait(driver, 15)
-        wait.until(EC.presence_of_element_located((By.CLASS_NAME, "widget-match-card__container")))
-        print("[OK] Maç kartları sayfada belirdi.")
+        print(f"\nSezon sayfasında {len(team_links)} takım satırı bulundu. Kontrol ediliyor...")
 
-        # Sayfanın sonuna kadar yavaşça in
-        last_height = driver.execute_script("return document.body.scrollHeight")
-        while True:
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(2)
-            new_height = driver.execute_script("return document.body.scrollHeight")
-            if new_height == last_height:
-                break
-            last_height = new_height
+        for team_row in team_links:
+            team_link_tag = team_row.select_one("td.hauptlink a")
+            if not team_link_tag: continue
 
-        print("[OK] Sayfanın sonuna kadar inildi.")
-        html_content = driver.page_source
+            tm_team_name = team_link_tag.get_text(strip=True)  # Transfermarkt'taki isim
 
-    except Exception as e:
-        print(f"Selenium ile işlem sırasında bir hata oluştu: {e}")
-        driver.quit()
-        return None
-    finally:
-        driver.quit()
-        print("Selenium tarayıcısı kapatıldı.")
+            # --- YENİ EŞLEŞTİRME VE KONTROL MANTIĞI ---
+            # Önce eşleştirme sözlüğünü kullanarak ismi standart hale getir
+            db_team_name = TAKIM_ESLESTIRME.get(tm_team_name, tm_team_name)
 
-    # Buradan sonrası aynı...
-    soup = BeautifulSoup(html_content, 'html.parser')
-    match_cards = soup.find_all('div', class_='widget-match-card__container')
+            print(f"  - Bulunan takım: '{tm_team_name}' -> Dönüştürülen isim: '{db_team_name}'")
+            # Bu takımın kadrosunu çekmeye gerek var mı, yok mu diye burada karar verebiliriz
+            # Şimdilik tümünü çekelim
+            # ------------------------------------------------
 
-    if not match_cards:
-        print("[HATA] Maç kartları ayrıştırılamadı.")
-        return None
+            team_squad_url = f"{BASE_URL}{team_link_tag['href'].replace('/startseite/', '/kader/')}/plus/0/galerie/0?saison_id={season}"
 
-    matches = []
+            driver.get(team_squad_url)
+            try:
+                wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "table.items tbody tr")))
+                squad_soup = BeautifulSoup(driver.page_source, "html.parser")
+                player_rows = squad_soup.select("table.items tbody tr.odd, table.items tbody tr.even")
+                print(f"    → {db_team_name} kadrosu alınıyor... ({len(player_rows)} oyuncu bulundu)")
 
-    for card in match_cards:
-        try:
-            status = card.find('div', class_='widget-match-card__status').get_text(strip=True)
-            if status != 'Final':
+                for row in player_rows:
+                    cells = row.find_all('td', recursive=False)
+                    if len(cells) < 3: continue
+
+                    name_cell = cells[1].select_one('table.inline-table td.hauptlink a')
+                    if not name_cell: continue
+
+                    name = name_cell.get_text(strip=True)
+                    position = row.select_one('td:nth-of-type(4)').get_text(strip=True)
+                    nationality_tags = cells[5].select('img.flaggenrahmen') if len(cells) > 5 else []
+                    nationalities = ", ".join([img['title'] for img in nationality_tags])
+
+                    all_data.append({
+                        "Season": f"{season}-{season + 1}",
+                        "Team": db_team_name,  # Standardize edilmiş ismi kullan
+                        "Player": name,
+                        "Position": position,
+                        "Nationality": nationalities
+                    })
+                time.sleep(1)
+            except Exception as e:
+                print(f"    ⚠️ {db_team_name} kadrosu alınırken hata: {e}")
                 continue
-            home_team = card.find('div', class_='widget-match-card__team--home').find('div',
-                                                                                      class_='widget-match-card__team-name').get_text(
-                strip=True)
-            away_team = card.find('div', class_='widget-match-card__team--away').find('div',
-                                                                                      class_='widget-match-card__team-name').get_text(
-                strip=True)
-            score_container = card.find('div', class_='widget-match-card__score-container')
-            home_score = score_container.find('span', class_='widget-match-card__score--home').get_text(strip=True)
-            away_score = score_container.find('span', class_='widget-match-card__score--away').get_text(strip=True)
+finally:
+    if driver:
+        driver.quit()
 
-            match_data = {
-                'ev_sahibi': home_team,
-                'deplasman': away_team,
-                'ev_sahibi_gol': int(home_score),
-                'deplasman_gol': int(away_score)
-            }
-            matches.append(match_data)
-        except (AttributeError, ValueError, IndexError):
-            continue
-
-    print(f"\n{len(matches)} adet geçerli maç başarıyla ayrıştırıldı.")
-    return matches
-
-
-if __name__ == '__main__':
-    scraped_matches = scrape_mackolik_season()
-
-    if scraped_matches:
-        print("\n--- İLK 5 MAÇIN SONUCU ---")
-        for match in scraped_matches[:5]:
-            print(match)
-    else:
-        print("\n[SONUÇ] Fonksiyon veri döndürmedi veya boş liste döndürdü.")
+if all_data:
+    df = pd.DataFrame(all_data)
+    df.to_csv(OUTPUT_FILE, index=False, encoding="utf-8-sig")
+    print(
+        f"\n✅ İşlem tamamlandı! {len(df['Team'].unique())} takımdan {len(df)} kayıt '{OUTPUT_FILE}' dosyasına kaydedildi.")
+else:
+    print("\nHiçbir veri çekilemedi.")
