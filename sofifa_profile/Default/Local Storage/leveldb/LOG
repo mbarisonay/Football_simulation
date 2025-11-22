@@ -1,3 +1,9 @@
-2025/11/22-16:09:10.486 4294 Reusing MANIFEST C:\Users\mbari\source\repos\Football_simulation\sofifa_profile\Default\Local Storage\leveldb/MANIFEST-000001
-2025/11/22-16:09:10.490 4294 Recovering log #4
-2025/11/22-16:09:10.492 4294 Reusing old log C:\Users\mbari\source\repos\Football_simulation\sofifa_profile\Default\Local Storage\leveldb/000004.log 
+2025/11/22-16:11:30.970 48c8 Reusing MANIFEST C:\Users\mbari\source\repos\Football_simulation\sofifa_profile\Default\Local Storage\leveldb/MANIFEST-000001
+2025/11/22-16:11:30.974 48c8 Recovering log #4
+2025/11/22-16:11:30.976 48c8 Reusing old log C:\Users\mbari\source\repos\Football_simulation\sofifa_profile\Default\Local Storage\leveldb/000004.log 
+2025/11/22-16:11:40.904 6354 Level-0 table #8: started
+2025/11/22-16:11:40.910 6354 Level-0 table #8: 21901 bytes OK
+2025/11/22-16:11:40.913 6354 Delete type=0 #4
+2025/11/22-16:19:20.057 6354 Level-0 table #10: started
+2025/11/22-16:19:20.062 6354 Level-0 table #10: 23829 bytes OK
+2025/11/22-16:19:20.063 6354 Delete type=0 #7
