@@ -6,7 +6,7 @@ import os
 # 1. SoFIFA'dan gelen dosya (Statlar)
 FILE_PLAYER_STATS = "ALL_FIFA_STATS_FINAL.csv"
 # 2. FBref'ten gelen dosya (Maçlar)
-FILE_MATCHES = "fbref_premier_league_stats_2000-2014_COMPLETE.csv"
+FILE_MATCHES = "fbref_premier_league_stats_2014-2025_COMPLETE.csv"
 # 3. Transfermarkt'tan gelen dosya (Uyruklar - Opsiyonel)
 FILE_SQUADS = "premier_league_squads_2000_2025.csv"
 
