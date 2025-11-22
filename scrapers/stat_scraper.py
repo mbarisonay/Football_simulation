@@ -18,7 +18,9 @@ LEAGUES = {
     "La Liga": "53",
     "Bundesliga": "19",
     "Serie A": "31",
-    "Ligue 1": "16"  # Fransa'yı da ekledim, tam paket olsun.
+    "Ligue 1": "16",
+    "Süper Lig": "68",
+    "Liga Portugal": "308"
 }
 
 STATS_MAP_TABLE = {

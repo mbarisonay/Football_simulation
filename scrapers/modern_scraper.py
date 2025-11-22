@@ -18,11 +18,13 @@ SEASONS_TO_SCRAPE = list(range(2014, 2025))  # 2014-2025 arası (FIFA verinle e�
 
 # --- LİGLER (FBref ID'leri) ---
 COMPETITIONS = [
-    {"id": "9", "name": "Premier-League", "league_tag": "Premier League"},
-    {"id": "12", "name": "La-Liga", "league_tag": "La Liga"},
-    {"id": "20", "name": "Bundesliga", "league_tag": "Bundesliga"},
-    {"id": "11", "name": "Serie-A", "league_tag": "Serie A"},
-    {"id": "13", "name": "Ligue-1", "league_tag": "Ligue 1"}
+    {"id": "9",  "name": "Premier-League", "league_tag": "Premier League"},
+    {"id": "12", "name": "La-Liga",        "league_tag": "La Liga"},
+    {"id": "20", "name": "Bundesliga",     "league_tag": "Bundesliga"},
+    {"id": "11", "name": "Serie-A",        "league_tag": "Serie A"},
+    {"id": "13", "name": "Ligue-1",        "league_tag": "Ligue 1"},
+    {"id": "26", "name": "Super-Lig",      "league_tag": "Süper Lig"},
+    {"id": "32", "name": "Primeira-Liga",  "league_tag": "Liga Portugal"}
 ]
 
 options = uc.ChromeOptions()
