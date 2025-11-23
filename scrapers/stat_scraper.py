@@ -14,7 +14,6 @@ BASE_URL_TEMPLATE = "https://sofifa.com/players?type=all&showCol%5B0%5D=ae&showC
 
 # --- LİG ID'LERİ (SoFIFA) ---
 LEAGUES = {
-    "Premier League": "13",
     "La Liga": "53",
     "Bundesliga": "19",
     "Serie A": "31",
@@ -35,8 +34,6 @@ STATS_MAP_TABLE = {
 }
 
 FIFA_ROSTERS = {
-    "FIFA 15": ("2014-2015", "150059"),
-    "FIFA 16": ("2015-2016", "160058"),
     "FIFA 17": ("2016-2017", "170099"),
     "FIFA 18": ("2017-2018", "180084"),
     "FIFA 19": ("2018-2019", "190075"),
