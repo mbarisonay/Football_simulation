@@ -10,11 +10,9 @@ import subprocess
 # --- YOL AYARLARI ---
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(CURRENT_DIR)
-
-# Hedef Dosya: İşlenmiş Ana Veri Seti
 SOURCE_FILE = os.path.join(BASE_DIR, "data", "processed", "MASTER_MATCH_STATS.csv")
 
-# Kartların Kaydedileceği Yer (Raw klasörüne atalım, sonra birleştiririz)
+# Çıktı Yeri
 OUTPUT_DIR = os.path.join(BASE_DIR, "data", "raw")
 if not os.path.exists(OUTPUT_DIR): os.makedirs(OUTPUT_DIR)
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "MATCH_CARDS.csv")
@@ -22,10 +20,7 @@ OUTPUT_FILE = os.path.join(OUTPUT_DIR, "MATCH_CARDS.csv")
 # --- KONTROLLER ---
 if not os.path.exists(SOURCE_FILE):
     print(f"❌ HATA: '{SOURCE_FILE}' bulunamadı!")
-    print("   Önce 'etl/merge_data.py' (final_merge) dosyasını çalıştırıp Master dosyayı oluşturun.")
     sys.exit()
-
-print(f"📂 Kaynak Dosya: {SOURCE_FILE}")
 
 
 # --- DRIVER YÖNETİMİ ---
@@ -54,95 +49,98 @@ def init_driver():
         return init_driver()
 
 
-# --- URL LİSTESİNİ HAZIRLA ---
-try:
-    df_source = pd.read_csv(SOURCE_FILE)
+# --- YENİLENMİŞ PARSER (V2) ---
+def extract_cards_only(soup):
+    """ 3 Farklı Stratejiyle Kartları Arar """
+    hy, hr, ay, ar = 0, 0, 0, 0
 
-    # MatchURL sütunu var mı kontrol et
+    # --- STRATEJİ 1: team_stats_extra (En yaygın yer) ---
+    # Genelde Fouls, Corners ile aynı yerdedir.
+    extra_stats = soup.find("div", id="team_stats_extra")
+    if extra_stats:
+        # "Cards" yazısını bul
+        label = extra_stats.find(lambda t: t.name == "div" and "Cards" in t.get_text())
+        if label:
+            # Solundaki (Home) ve Sağındaki (Away) divleri al
+            home_div = label.find_previous_sibling("div")
+            away_div = label.find_next_sibling("div")
+
+            if home_div and away_div:
+                hy = len(home_div.select('.yellow_card'))
+                hr = len(home_div.select('.red_card')) + len(home_div.select('.yellow_red_card'))
+                ay = len(away_div.select('.yellow_card'))
+                ar = len(away_div.select('.red_card')) + len(away_div.select('.yellow_red_card'))
+                return hy, hr, ay, ar
+
+    # --- STRATEJİ 2: team_stats (Bar grafiklerinin olduğu yer) ---
+    team_stats = soup.find("div", id="team_stats")
+    if team_stats:
+        # Burada genelde class="cards" olan divler olur
+        card_containers = team_stats.select("div.cards")
+        if len(card_containers) >= 2:
+            # [0] -> Home, [1] -> Away
+            hy = len(card_containers[0].select('.yellow_card'))
+            hr = len(card_containers[0].select('.red_card')) + len(card_containers[0].select('.yellow_red_card'))
+            ay = len(card_containers[1].select('.yellow_card'))
+            ar = len(card_containers[1].select('.red_card')) + len(card_containers[1].select('.yellow_red_card'))
+            return hy, hr, ay, ar
+
+    # --- STRATEJİ 3: Scorebox Summary (En üstteki özet) ---
+    # Eğer yukarıdakiler yoksa, bazen kartlar en tepedeki skor kutusunun altında ikon olarak durur
+    # Ancak bu genellikle timeline ile karışır, o yüzden dikkatli seçmeliyiz.
+    # Şimdilik ilk 2 strateji %99 çalışır.
+
+    return 0, 0, 0, 0
+
+
+# --- MAIN ---
+try:
+    # URL Listesini Hazırla
+    df_source = pd.read_csv(SOURCE_FILE)
     if 'MatchURL' not in df_source.columns:
-        print("❌ HATA: Master dosyasında 'MatchURL' sütunu yok!")
-        print("   Link olmadan kartları çekemeyiz. Merge işleminde URL'lerin silinmediğinden emin olun.")
+        print("❌ HATA: MatchURL sütunu yok.")
         sys.exit()
 
     all_urls = df_source['MatchURL'].dropna().unique().tolist()
-except Exception as e:
-    print(f"❌ Dosya okuma hatası: {e}")
-    sys.exit()
 
-# Zaten çekilmiş kartlar varsa atla
-scraped_urls = set()
-if os.path.exists(OUTPUT_FILE):
-    try:
-        df_existing = pd.read_csv(OUTPUT_FILE)
-        scraped_urls = set(df_existing['MatchURL'].tolist())
-        print(f"📥 {len(scraped_urls)} maçın kart verisi zaten çekilmiş, atlanacak.")
-    except:
-        pass
+    # Zaten çekilmişleri ele
+    scraped_urls = set()
+    if os.path.exists(OUTPUT_FILE):
+        try:
+            df_exist = pd.read_csv(OUTPUT_FILE)
+            scraped_urls = set(df_exist['MatchURL'].tolist())
+            print(f"📥 {len(scraped_urls)} maç zaten var, atlanıyor.")
+        except:
+            pass
 
-urls_to_scrape = [u for u in all_urls if u not in scraped_urls]
-print(f"🚀 Toplam {len(urls_to_scrape)} maç taranacak...")
+    urls_to_scrape = [u for u in all_urls if u not in scraped_urls]
+    print(f"🚀 Kalan {len(urls_to_scrape)} maç taranacak...")
 
-if not urls_to_scrape:
-    print("✅ Tüm maçların kart verisi zaten var. İşlem yapmaya gerek yok.")
-    sys.exit()
+    if not urls_to_scrape:
+        print("✅ Yapılacak iş yok.")
+        sys.exit()
 
-driver = init_driver()
+    driver = init_driver()
 
-
-# --- PARSER ---
-def extract_cards_only(soup):
-    """ Kart İkonlarını Sayar """
-    header = soup.find(lambda tag: tag.name in ["div", "th"] and "Cards" in tag.get_text())
-    hy, hr, ay, ar = 0, 0, 0, 0
-
-    if header:
-        container = None
-        if header.name == "th":
-            container = header.find_parent("tr").find_next_sibling("tr")
-        else:
-            # Div yapısı için en yakın tablo satırını bul
-            container = header.find_parent("tr")
-            if container: container = container.find_next_sibling("tr")
-
-        if container:
-            # .cards class'ına sahip divleri bul
-            # Bazı sayfalarda td içinde, bazılarında div içinde olabilir
-            card_divs = container.select(".cards")
-
-            if len(card_divs) >= 2:
-                # Ev Sahibi
-                hy = len(card_divs[0].select('.yellow_card'))
-                hr = len(card_divs[0].select('.red_card')) + len(card_divs[0].select('.yellow_red_card'))
-                # Deplasman
-                ay = len(card_divs[1].select('.yellow_card'))
-                ar = len(card_divs[1].select('.red_card')) + len(card_divs[1].select('.yellow_red_card'))
-
-    return hy, hr, ay, ar
-
-
-# --- DÖNGÜ ---
-try:
     for i, url in enumerate(urls_to_scrape, 1):
         try:
             driver.get(url)
-            # Kartlar hızlı yüklenir
-            time.sleep(random.uniform(1.0, 2.5))
+            time.sleep(random.uniform(1.0, 2.0))
 
             soup = BeautifulSoup(driver.page_source, "html.parser")
 
+            # Kartları Çek
             hy, hr, ay, ar = extract_cards_only(soup)
 
-            card_data = {
+            # Kaydet
+            df_single = pd.DataFrame([{
                 "MatchURL": url,
-                "HomeYellowCards": hy,
-                "HomeRedCards": hr,
-                "AwayYellowCards": ay,
-                "AwayRedCards": ar
-            }
+                "HomeYellowCards": hy, "HomeRedCards": hr,
+                "AwayYellowCards": ay, "AwayRedCards": ar
+            }])
 
-            df_single = pd.DataFrame([card_data])
-            header_mode = not os.path.exists(OUTPUT_FILE)
-            df_single.to_csv(OUTPUT_FILE, mode='a', header=header_mode, index=False)
+            hdr = not os.path.exists(OUTPUT_FILE)
+            df_single.to_csv(OUTPUT_FILE, mode='a', header=hdr, index=False)
 
             print(f"✅ {i}/{len(urls_to_scrape)} | 🟨 {hy}-{ay} 🟥 {hr}-{ar} | {url.split('/')[-1]}")
 
@@ -155,7 +153,5 @@ try:
 
 except KeyboardInterrupt:
     print("\n🛑 Durduruldu.")
-
 finally:
     if driver: driver.quit()
-    print("\n🏁 İşlem bitti.")
