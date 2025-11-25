@@ -1,0 +1,50 @@
+2025/11/25-11:47:33.441 1208 Creating DB C:\Users\mbari\source\repos\Football_simulation\scrapers\sofifa_profile\Default\Local Storage\leveldb since it was missing.
+2025/11/25-11:47:33.510 1208 Reusing MANIFEST C:\Users\mbari\source\repos\Football_simulation\scrapers\sofifa_profile\Default\Local Storage\leveldb/MANIFEST-000001
+2025/11/25-11:52:59.395 2ff0 Level-0 table #5: started
+2025/11/25-11:52:59.400 2ff0 Level-0 table #5: 23586 bytes OK
+2025/11/25-11:52:59.403 2ff0 Delete type=0 #3
+2025/11/25-11:58:34.334 2ff0 Level-0 table #7: started
+2025/11/25-11:58:34.339 2ff0 Level-0 table #7: 24134 bytes OK
+2025/11/25-11:58:34.341 2ff0 Delete type=0 #4
+2025/11/25-12:04:17.441 2ff0 Level-0 table #9: started
+2025/11/25-12:04:17.449 2ff0 Level-0 table #9: 25217 bytes OK
+2025/11/25-12:04:17.451 2ff0 Delete type=0 #6
+2025/11/25-12:10:06.209 2ff0 Level-0 table #11: started
+2025/11/25-12:10:06.217 2ff0 Level-0 table #11: 20407 bytes OK
+2025/11/25-12:10:06.218 2ff0 Delete type=0 #8
+2025/11/25-12:19:17.499 2ff0 Level-0 table #13: started
+2025/11/25-12:19:17.503 2ff0 Level-0 table #13: 23231 bytes OK
+2025/11/25-12:19:17.504 2ff0 Delete type=0 #10
+2025/11/25-12:24:43.198 2ff0 Level-0 table #15: started
+2025/11/25-12:24:43.207 2ff0 Level-0 table #15: 22171 bytes OK
+2025/11/25-12:24:43.209 2ff0 Delete type=0 #12
+2025/11/25-12:24:43.209 2ff0 Compacting 4@0 + 1@1 files
+2025/11/25-12:24:43.214 2ff0 Generated table #16@0: 38 keys, 5776 bytes
+2025/11/25-12:24:43.214 2ff0 Compacted 4@0 + 1@1 files => 5776 bytes
+2025/11/25-12:24:43.215 2ff0 compacted to: files[ 0 1 1 0 0 0 0 ]
+2025/11/25-12:24:43.215 2ff0 Delete type=2 #7
+2025/11/25-12:24:43.216 2ff0 Delete type=2 #9
+2025/11/25-12:24:43.216 2ff0 Delete type=2 #11
+2025/11/25-12:24:43.216 2ff0 Delete type=2 #13
+2025/11/25-12:24:43.216 2ff0 Delete type=2 #15
+2025/11/25-12:30:28.088 2ff0 Level-0 table #18: started
+2025/11/25-12:30:28.096 2ff0 Level-0 table #18: 24894 bytes OK
+2025/11/25-12:30:28.097 2ff0 Delete type=0 #14
+2025/11/25-12:36:19.580 2ff0 Level-0 table #20: started
+2025/11/25-12:36:19.583 2ff0 Level-0 table #20: 21868 bytes OK
+2025/11/25-12:36:19.584 2ff0 Delete type=0 #17
+2025/11/25-12:42:45.482 2ff0 Level-0 table #22: started
+2025/11/25-12:42:45.484 2ff0 Level-0 table #22: 21018 bytes OK
+2025/11/25-12:42:45.485 2ff0 Delete type=0 #19
+2025/11/25-12:51:34.329 1208 Level-0 table #24: started
+2025/11/25-12:51:34.333 1208 Level-0 table #24: 20321 bytes OK
+2025/11/25-12:51:34.335 1208 Delete type=0 #21
+2025/11/25-12:51:34.335 1208 Compacting 4@0 + 1@1 files
+2025/11/25-12:51:34.337 1208 Generated table #25@0: 38 keys, 5552 bytes
+2025/11/25-12:51:34.337 1208 Compacted 4@0 + 1@1 files => 5552 bytes
+2025/11/25-12:51:34.338 1208 compacted to: files[ 0 1 1 0 0 0 0 ]
+2025/11/25-12:51:34.338 1208 Delete type=2 #16
+2025/11/25-12:51:34.338 1208 Delete type=2 #18
+2025/11/25-12:51:34.338 1208 Delete type=2 #20
+2025/11/25-12:51:34.338 1208 Delete type=2 #22
+2025/11/25-12:51:34.338 1208 Delete type=2 #24

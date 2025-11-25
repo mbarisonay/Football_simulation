@@ -1,132 +1,116 @@
-# merge_data.py (Squads ve FIFA Reytinglerini Birleştiren Kod)
-
 import pandas as pd
 import os
-from unidecode import unidecode
+import sys
 
-# --- AYARLAR ---
-# Ana kadro dosyanızın adı
-SQUADS_FILE = 'premier_league_squads_2000_2025.csv'
+# --- YOL AYARLARI ---
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RAW_DATA_DIR = os.path.join(BASE_DIR, 'data', 'raw')
+PROCESSED_DATA_DIR = os.path.join(BASE_DIR, 'data', 'processed')
 
-# SoFIFA scraper'ının oluşturduğu ana klasör
-RATINGS_FOLDER = 'FIFA_Ratings'
+os.makedirs(PROCESSED_DATA_DIR, exist_ok=True)
 
-# Birleştirilmiş verinin kaydedileceği dosya adı
-OUTPUT_FILE = 'final_merged_player_database.csv'
+# --- DOSYA LİSTELERİ ---
+PLAYER_FILES = [
+    "ALL_FIFA_STATS_FINAL.csv",
+    "ALL_LEAGUES_FIFA_STATS.csv"
+]
 
-# Farklı kaynaklardan gelen takım isimlerini eşleştirmek için harita
-# SOL TARAF: premier_league_squads.csv'deki isim, SAĞ TARAF: SoFIFA'daki isim
-TEAM_NAME_MAP = {
-    "Man City": "Manchester City",
-    "Man United": "Manchester United",
-    "Newcastle": "Newcastle United",
-    "Tottenham": "Tottenham Hotspur",
-    "Nott'm Forest": "Nottingham Forest",
-    "Wolves": "Wolverhampton Wanderers",
-    "West Ham": "West Ham United",
-    "Bournemouth": "AFC Bournemouth",
-    "Sheffield Utd": "Sheffield United",
-    # Eklenecek diğer takımlar buraya...
-}
+MATCH_FILES = [
+    "fbref_premier_league_stats_2014-2025_COMPLETE.csv",
+    "fbref_laLiga_stats_2016-2025_COMPLETE.csv",
+    "ALL_LEAGUES_DETAILED_MATCHES.csv"
+]
 
 
-def normalize_name(name):
-    """Oyuncu isimlerini eşleştirme için standart bir formata getirir."""
-    if not isinstance(name, str):
-        return ""
-    # Küçük harfe çevir, aksanları kaldır, noktalama işaretlerini sil
-    name = unidecode(name).lower()
-    name = name.replace('.', '').replace('-', ' ').strip()
-    return name
+def merge_players():
+    print("\n⚽ OYUNCU VERİLERİ BİRLEŞTİRİLİYOR...")
+    df_list = []
+
+    for filename in PLAYER_FILES:
+        filepath = os.path.join(RAW_DATA_DIR, filename)
+        if os.path.exists(filepath):
+            print(f"  -> Okunuyor: {filename}")
+            # Dtype uyarısını önlemek için low_memory=False
+            df = pd.read_csv(filepath, low_memory=False)
+
+            if 'League' not in df.columns:
+                df['League'] = 'Premier League'
+
+            df_list.append(df)
+        else:
+            print(f"  ⚠️ UYARI: {filename} bulunamadı.")
+
+    if not df_list: return
+
+    master_players = pd.concat(df_list, ignore_index=True)
+
+    # Sayısal sütunları temizle (Overall, Potential vb.)
+    numeric_cols = ['Overall', 'Potential', 'Age', 'Crossing', 'Finishing']  # Önemli olanlar
+    for col in numeric_cols:
+        if col in master_players.columns:
+            master_players[col] = pd.to_numeric(master_players[col], errors='coerce').fillna(0).astype(int)
+
+    master_players.drop_duplicates(subset=['Name', 'Team', 'Season'], keep='last', inplace=True)
+
+    output_path = os.path.join(PROCESSED_DATA_DIR, "MASTER_PLAYER_STATS.csv")
+    master_players.to_csv(output_path, index=False, encoding='utf-8-sig')
+    print(f"✅ OYUNCU VERİTABANI HAZIR: {len(master_players)} satır.")
 
 
-def run_merge_process():
-    """Tüm veri birleştirme sürecini yönetir."""
+def merge_matches():
+    print("\n🏟️ MAÇ VERİLERİ BİRLEŞTİRİLİYOR...")
+    df_list = []
 
-    # 1. SoFIFA verilerini tek bir DataFrame'de topla
-    all_ratings_df = []
-    print(f"'{RATINGS_FOLDER}' klasöründeki SoFIFA verileri okunuyor...")
-    for root, _, files in os.walk(RATINGS_FOLDER):
-        for file in files:
-            if file.endswith('.csv'):
-                try:
-                    file_path = os.path.join(root, file)
-                    df = pd.read_csv(file_path)
-                    all_ratings_df.append(df)
-                except Exception as e:
-                    print(f"Hata: {file_path} okunurken sorun oluştu - {e}")
+    for filename in MATCH_FILES:
+        filepath = os.path.join(RAW_DATA_DIR, filename)
+        if os.path.exists(filepath):
+            print(f"  -> Okunuyor: {filename}")
+            # UYARIYI ÇÖZEN KISIM: low_memory=False
+            df = pd.read_csv(filepath, low_memory=False)
 
-    if not all_ratings_df:
-        print("HATA: Hiç SoFIFA reyting verisi bulunamadı. Lütfen scraper'ı çalıştırdığınızdan emin olun.")
-        return
+            # Lig yoksa ekle
+            if 'League' not in df.columns:
+                if "premier_league" in filename.lower():
+                    df['League'] = 'Premier League'
+                elif "laliga" in filename.lower():
+                    df['League'] = 'La Liga'
 
-    ratings_df = pd.concat(all_ratings_df, ignore_index=True)
-    print(f"-> Toplam {len(ratings_df)} oyuncu reytingi bulundu.")
+            # Eksik sütunları doldur
+            cols_to_ensure = ["HomeYellowCards", "HomeRedCards", "AwayYellowCards", "AwayRedCards", "HomeSaves",
+                              "AwaySaves", "HomePossession", "AwayPossession"]
+            for col in cols_to_ensure:
+                if col not in df.columns: df[col] = 0
 
-    # 2. Ana kadro dosyasını oku
+            df_list.append(df)
+
+    if not df_list: return
+
+    master_matches = pd.concat(df_list, ignore_index=True)
+
+    # --- TEMİZLİK VE TİP DÖNÜŞÜMÜ ---
+    # Skorları (5. ve 6. sütunlar) zorla sayıya çeviriyoruz
+    for col in ['FTHG', 'FTAG']:
+        if col in master_matches.columns:
+            master_matches[col] = pd.to_numeric(master_matches[col], errors='coerce').fillna(0).astype(int)
+
+    # Tarih formatı
+    master_matches = master_matches.dropna(subset=['Date'])
     try:
-        squads_df = pd.read_csv(SQUADS_FILE)
-        print(f"'{SQUADS_FILE}' dosyasından {len(squads_df)} kadro kaydı okundu.")
-    except FileNotFoundError:
-        print(f"HATA: '{SQUADS_FILE}' dosyası bulunamadı.")
-        return
+        master_matches['Date'] = pd.to_datetime(master_matches['Date'], errors='coerce')
+        master_matches = master_matches.sort_values(by='Date', ascending=False)
+    except:
+        pass
 
-    # 3. Eşleştirme için hazırlık yap
+    # Tekilleştirme
+    master_matches.drop_duplicates(subset=['Date', 'HomeTeam', 'AwayTeam'], keep='last', inplace=True)
+    master_matches.fillna(0, inplace=True)
 
-    # Takım isimlerini standartlaştır
-    squads_df['Team_Normalized'] = squads_df['Team'].replace(TEAM_NAME_MAP)
-    ratings_df['Team_Normalized'] = ratings_df['Club']  # SoFIFA'da sütun adı 'Club'
-
-    # Oyuncu isimlerini standartlaştırarak "merge_key" oluştur
-    squads_df['merge_key'] = squads_df['Player'].apply(normalize_name)
-    ratings_df['merge_key'] = ratings_df['PlayerName'].apply(normalize_name)
-
-    # Sezon sütunlarını eşleştir
-    squads_df.rename(columns={'Season': 'Season_squad'}, inplace=True)
-    ratings_df.rename(columns={'Season': 'Season_rating'}, inplace=True)
-    squads_df['Season'] = squads_df['Season_squad']
-    ratings_df['Season'] = ratings_df['Season_rating']
-
-    # 4. İki DataFrame'i birleştir (merge)
-    print("Veri setleri birleştiriliyor...")
-
-    # 'left' merge kullanarak ana kadro listesindeki tüm oyuncuları koru
-    merged_df = pd.merge(
-        squads_df,
-        ratings_df[['Season', 'Team_Normalized', 'merge_key', 'Overall', 'Potential'] + list(STATS_MAP.keys())[6:]],
-        # Sadece istediğimiz sütunları alalım
-        on=['Season', 'Team_Normalized', 'merge_key'],
-        how='left'
-    )
-
-    # 5. Sonuçları temizle ve kaydet
-
-    # Geçici sütunları kaldır
-    merged_df.drop(columns=['Team_Normalized', 'merge_key', 'Season_squad', 'Season_rating'], inplace=True)
-
-    # Eşleşme oranını kontrol et
-    successful_matches = merged_df['Overall'].notna().sum()
-    total_players = len(merged_df)
-    match_percentage = (successful_matches / total_players) * 100
-
-    print(f"\nBirleştirme Tamamlandı!")
-    print(f"Toplam {total_players} oyuncudan {successful_matches} tanesi için reyting verisi başarıyla eşleştirildi.")
-    print(f"Eşleşme Oranı: {match_percentage:.2f}%")
-
-    merged_df.to_csv(OUTPUT_FILE, index=False, encoding='utf-8-sig')
-    print(f"\n✅ Nihai birleştirilmiş veri seti '{OUTPUT_FILE}' dosyasına kaydedildi.")
+    output_path = os.path.join(PROCESSED_DATA_DIR, "MASTER_MATCH_STATS.csv")
+    master_matches.to_csv(output_path, index=False, encoding='utf-8-sig')
+    print(f"✅ MAÇ VERİTABANI HAZIR: {len(master_matches)} maç.")
 
 
-if __name__ == '__main__':
-    # STATS_MAP sözlüğünü scraper'dan kopyalayıp buraya da eklememiz gerekiyor.
-    STATS_MAP = {
-        'PlayerName': 'name', 'Positions': 'positions', 'Age': 'ae', 'Overall': 'oa', 'Potential': 'pt', 'Club': 'club',
-        'Crossing': 'cr', 'Finishing': 'fi', 'HeadingAccuracy': 'he', 'ShortPassing': 'sh', 'Volleys': 'vo',
-        'Dribbling': 'dr', 'Curve': 'cu', 'FKAccuracy': 'fr', 'LongPassing': 'lo', 'BallControl': 'bl',
-        'Acceleration': 'ac', 'SprintSpeed': 'sp', 'Agility': 'ag', 'Reactions': 're', 'Balance': 'ba',
-        'ShotPower': 'so', 'Jumping': 'ju', 'Stamina': 'st', 'Strength': 'sr', 'LongShots': 'ln',
-        'Aggression': 'ar', 'Interceptions': 'in', 'Positioning': 'po', 'Vision': 'vi', 'Penalties': 'pe',
-        'Composure': 'cm', 'Marking': 'ma', 'StandingTackle': 'sa', 'SlidingTackle': 'sl',
-        'GKDiving': 'gd', 'GKHandling': 'gh', 'GKKicking': 'gc', 'GKPositioning': 'gp', 'GKReflexes': 'gr'
-    }
-    run_merge_process()
+if __name__ == "__main__":
+    merge_players()
+    merge_matches()
+    print("\n🏁 İŞLEM TAMAMLANDI.")
