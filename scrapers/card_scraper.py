@@ -1,6 +1,7 @@
 import pandas as pd
 import undetected_chromedriver as uc
 from bs4 import BeautifulSoup
+from selenium.common.exceptions import TimeoutException, WebDriverException
 import time
 import random
 import os
@@ -11,11 +12,10 @@ import subprocess
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(CURRENT_DIR)
 SOURCE_FILE = os.path.join(BASE_DIR, "data", "processed", "MASTER_MATCH_STATS.csv")
-
-# Çıktı Yeri
 OUTPUT_DIR = os.path.join(BASE_DIR, "data", "raw")
-if not os.path.exists(OUTPUT_DIR): os.makedirs(OUTPUT_DIR)
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "MATCH_CARDS.csv")
+
+if not os.path.exists(OUTPUT_DIR): os.makedirs(OUTPUT_DIR)
 
 # --- KONTROLLER ---
 if not os.path.exists(SOURCE_FILE):
@@ -39,77 +39,61 @@ def init_driver():
     options = uc.ChromeOptions()
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("--no-sandbox")
-    options.page_load_strategy = 'eager'
+    options.add_argument("--disable-dev-shm-usage")
+    options.page_load_strategy = 'eager'  # HTML yüklensin yeter, resimleri bekleme
+
     try:
         d = uc.Chrome(options=options, use_subprocess=True)
-        d.set_page_load_timeout(60)
+        d.set_page_load_timeout(20)  # 20 saniyeden fazla bekleme
         return d
     except:
         time.sleep(5)
         return init_driver()
 
 
-# --- YENİLENMİŞ PARSER (V2) ---
+# --- PARSER ---
 def extract_cards_only(soup):
     """ 3 Farklı Stratejiyle Kartları Arar """
     hy, hr, ay, ar = 0, 0, 0, 0
 
-    # --- STRATEJİ 1: team_stats_extra (En yaygın yer) ---
-    # Genelde Fouls, Corners ile aynı yerdedir.
-    extra_stats = soup.find("div", id="team_stats_extra")
-    if extra_stats:
-        # "Cards" yazısını bul
-        label = extra_stats.find(lambda t: t.name == "div" and "Cards" in t.get_text())
+    # Strateji 1: team_stats_extra
+    extra = soup.find("div", id="team_stats_extra")
+    if extra:
+        label = extra.find(lambda t: t.name == "div" and "Cards" in t.get_text())
         if label:
-            # Solundaki (Home) ve Sağındaki (Away) divleri al
-            home_div = label.find_previous_sibling("div")
-            away_div = label.find_next_sibling("div")
-
-            if home_div and away_div:
-                hy = len(home_div.select('.yellow_card'))
-                hr = len(home_div.select('.red_card')) + len(home_div.select('.yellow_red_card'))
-                ay = len(away_div.select('.yellow_card'))
-                ar = len(away_div.select('.red_card')) + len(away_div.select('.yellow_red_card'))
+            h_div, a_div = label.find_previous_sibling("div"), label.find_next_sibling("div")
+            if h_div and a_div:
+                hy = len(h_div.select('.yellow_card'))
+                hr = len(h_div.select('.red_card')) + len(h_div.select('.yellow_red_card'))
+                ay = len(a_div.select('.yellow_card'))
+                ar = len(a_div.select('.red_card')) + len(a_div.select('.yellow_red_card'))
                 return hy, hr, ay, ar
 
-    # --- STRATEJİ 2: team_stats (Bar grafiklerinin olduğu yer) ---
+    # Strateji 2: team_stats (Bar Charts)
     team_stats = soup.find("div", id="team_stats")
     if team_stats:
-        # Burada genelde class="cards" olan divler olur
-        card_containers = team_stats.select("div.cards")
-        if len(card_containers) >= 2:
-            # [0] -> Home, [1] -> Away
-            hy = len(card_containers[0].select('.yellow_card'))
-            hr = len(card_containers[0].select('.red_card')) + len(card_containers[0].select('.yellow_red_card'))
-            ay = len(card_containers[1].select('.yellow_card'))
-            ar = len(card_containers[1].select('.red_card')) + len(card_containers[1].select('.yellow_red_card'))
+        cards = team_stats.select("div.cards")
+        if len(cards) >= 2:
+            hy = len(cards[0].select('.yellow_card'))
+            hr = len(cards[0].select('.red_card')) + len(cards[0].select('.yellow_red_card'))
+            ay = len(cards[1].select('.yellow_card'))
+            ar = len(cards[1].select('.red_card')) + len(cards[1].select('.yellow_red_card'))
             return hy, hr, ay, ar
-
-    # --- STRATEJİ 3: Scorebox Summary (En üstteki özet) ---
-    # Eğer yukarıdakiler yoksa, bazen kartlar en tepedeki skor kutusunun altında ikon olarak durur
-    # Ancak bu genellikle timeline ile karışır, o yüzden dikkatli seçmeliyiz.
-    # Şimdilik ilk 2 strateji %99 çalışır.
 
     return 0, 0, 0, 0
 
 
-# --- MAIN ---
+# --- HAZIRLIK ---
 try:
-    # URL Listesini Hazırla
     df_source = pd.read_csv(SOURCE_FILE)
-    if 'MatchURL' not in df_source.columns:
-        print("❌ HATA: MatchURL sütunu yok.")
-        sys.exit()
-
     all_urls = df_source['MatchURL'].dropna().unique().tolist()
 
-    # Zaten çekilmişleri ele
     scraped_urls = set()
     if os.path.exists(OUTPUT_FILE):
         try:
             df_exist = pd.read_csv(OUTPUT_FILE)
             scraped_urls = set(df_exist['MatchURL'].tolist())
-            print(f"📥 {len(scraped_urls)} maç zaten var, atlanıyor.")
+            print(f"📥 {len(scraped_urls)} maç zaten var.")
         except:
             pass
 
@@ -117,22 +101,42 @@ try:
     print(f"🚀 Kalan {len(urls_to_scrape)} maç taranacak...")
 
     if not urls_to_scrape:
-        print("✅ Yapılacak iş yok.")
+        print("✅ Bitti.")
         sys.exit()
 
     driver = init_driver()
 
+    # --- DÖNGÜ ---
     for i, url in enumerate(urls_to_scrape, 1):
+
+        # Her 50 maçta bir tarayıcıyı yenile (RAM Şişmesini Önle)
+        if i % 50 == 0:
+            print("♻️  Tarayıcı yenileniyor...")
+            driver.quit()
+            time.sleep(2)
+            driver = init_driver()
+
         try:
-            driver.get(url)
+            try:
+                driver.get(url)
+            except TimeoutException:
+                # Sayfa yüklenmesi uzun sürdüyse (reklam vs), durdur ve veriyi almaya çalış
+                driver.execute_script("window.stop();")
+            except WebDriverException:
+                # Tarayıcı çöktüyse
+                print("    🚨 Tarayıcı çöktü, yenileniyor...")
+                driver = init_driver()
+                driver.get(url)
+
+            # Biraz bekle ki HTML oluşsun
             time.sleep(random.uniform(1.0, 2.0))
 
             soup = BeautifulSoup(driver.page_source, "html.parser")
-
-            # Kartları Çek
             hy, hr, ay, ar = extract_cards_only(soup)
 
-            # Kaydet
+            # Veri boşsa (0-0) ve sayfada hata varsa (bazen olur), retry yapılabilir
+            # Ama şimdilik 0 olarak kaydediyoruz, akış bozulmasın.
+
             df_single = pd.DataFrame([{
                 "MatchURL": url,
                 "HomeYellowCards": hy, "HomeRedCards": hr,
